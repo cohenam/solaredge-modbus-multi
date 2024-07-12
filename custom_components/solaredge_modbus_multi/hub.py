@@ -239,7 +239,9 @@ class SolarEdgeModbusMultiHub:
 
         for inverter_index in range(self._number_of_inverters):
             inverter_unit_id = inverter_index + self._start_device_id
-
+            if inverter_unit_id == 2:
+                inverter_unit_id = 3
+                
             try:
                 _LOGGER.debug(
                     f"Looking for inverter at {self.hub_host} ID {inverter_unit_id}"
