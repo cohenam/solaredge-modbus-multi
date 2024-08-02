@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import EntityCategory
@@ -30,8 +33,7 @@ async def async_setup_entry(
         if hub.option_detect_extras and inverter.advanced_power_control:
             entities.append(AdvPowerControlEnabled(inverter, config_entry, coordinator))
 
-        if hub.option_detect_extras:
-            entities.append(GridStatusOnOff(inverter, config_entry, coordinator))
+        entities.append(GridStatusOnOff(inverter, config_entry, coordinator))
 
     if entities:
         async_add_entities(entities)
@@ -100,6 +102,7 @@ class AdvPowerControlEnabled(SolarEdgeBinarySensorBase):
 class GridStatusOnOff(SolarEdgeBinarySensorBase):
     """Grid Status On Off. This is undocumented from discussions."""
 
+    device_class = BinarySensorDeviceClass.POWER
     icon = "mdi:transmission-tower"
 
     @property
