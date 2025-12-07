@@ -603,8 +603,8 @@ class ACPower(SolarEdgeSensorBase):
     def suggested_display_precision(self):
         return abs(self._platform.decoded_model["AC_Power_SF"])
 
-class ACPowerInverted(ACPower):
 
+class ACPowerInverted(ACPower):
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
 
@@ -622,6 +622,7 @@ class ACPowerInverted(ACPower):
         if value is None:
             return None
         return value * -1
+
 
 class ACFrequency(SolarEdgeSensorBase):
     device_class = SensorDeviceClass.FREQUENCY
@@ -1405,14 +1406,12 @@ class StatusVendor(SolarEdgeSensorBase):
 
 
 class SolarEdgeGlobalPowerControlBlock(SolarEdgeSensorBase):
-
     @property
     def available(self) -> bool:
         return super().available and self._platform.global_power_control
 
 
 class SolarEdgeRRCR(SolarEdgeGlobalPowerControlBlock):
-
     @property
     def unique_id(self) -> str:
         return f"{self._platform.uid_base}_rrcr"
@@ -2158,7 +2157,6 @@ class SolarEdgeBatteryPowerBase(SolarEdgeSensorBase):
 
 
 class SolarEdgeBatteryMaxChargePower(SolarEdgeBatteryPowerBase):
-
     @property
     def unique_id(self) -> str:
         return f"{self._platform.uid_base}_max_charge_power"
@@ -2184,7 +2182,6 @@ class SolarEdgeBatteryMaxChargePower(SolarEdgeBatteryPowerBase):
 
 
 class SolarEdgeBatteryMaxChargePeakPower(SolarEdgeBatteryPowerBase):
-
     @property
     def unique_id(self) -> str:
         return f"{self._platform.uid_base}_max_charge_peak_power"
@@ -2210,7 +2207,6 @@ class SolarEdgeBatteryMaxChargePeakPower(SolarEdgeBatteryPowerBase):
 
 
 class SolarEdgeBatteryMaxDischargePower(SolarEdgeBatteryPowerBase):
-
     @property
     def unique_id(self) -> str:
         return f"{self._platform.uid_base}_max_discharge_power"
@@ -2236,7 +2232,6 @@ class SolarEdgeBatteryMaxDischargePower(SolarEdgeBatteryPowerBase):
 
 
 class SolarEdgeBatteryMaxDischargePeakPower(SolarEdgeBatteryPowerBase):
-
     @property
     def unique_id(self) -> str:
         return f"{self._platform.uid_base}_max_discharge_peak_power"
@@ -2363,7 +2358,6 @@ class SolarEdgeBatterySOE(SolarEdgeSensorBase):
 
 
 class SolarEdgeAdvancedPowerControlBlock(SolarEdgeSensorBase):
-
     @property
     def available(self) -> bool:
         return super().available and self._platform.advanced_power_control
