@@ -138,6 +138,7 @@ async def async_setup_entry(
         entities.append(ACPower(meter, config_entry, coordinator, "A"))
         entities.append(ACPower(meter, config_entry, coordinator, "B"))
         entities.append(ACPower(meter, config_entry, coordinator, "C"))
+        entities.append(ACPowerInverted(meter, config_entry, coordinator))
         entities.append(ACVoltAmp(meter, config_entry, coordinator))
         entities.append(ACVoltAmp(meter, config_entry, coordinator, "A"))
         entities.append(ACVoltAmp(meter, config_entry, coordinator, "B"))
@@ -602,6 +603,18 @@ class ACPower(SolarEdgeSensorBase):
     def suggested_display_precision(self):
         return abs(self._platform.decoded_model["AC_Power_SF"])
 
+class ACPowerInverted(ACPower):
+
+    def __init__(self, platform, config_entry, coordinator, phase: str = None):
+        super().__init__(platform, config_entry, coordinator)
+
+    @property
+    def unique_id(self) -> str:
+        return f"{super().unique_id}_inverted"
+
+    @property
+    def name(self) -> str:
+        return f"{super().name} Inverted"
 
 class ACFrequency(SolarEdgeSensorBase):
     device_class = SensorDeviceClass.FREQUENCY
