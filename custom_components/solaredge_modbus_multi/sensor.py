@@ -605,7 +605,7 @@ class ACPower(SolarEdgeSensorBase):
 
 class ACPowerInverted(ACPower):
 
-    def __init__(self, platform, config_entry, coordinator, phase: str = None):
+    def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
 
     @property
