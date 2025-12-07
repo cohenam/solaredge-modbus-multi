@@ -621,7 +621,7 @@ class ACPowerInverted(ACPower):
         value = super().native_value
         if value is None:
             return None
-        return value * -1
+        return -value
 
 
 class ACFrequency(SolarEdgeSensorBase):
