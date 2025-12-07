@@ -616,6 +616,13 @@ class ACPowerInverted(ACPower):
     def name(self) -> str:
         return f"{super().name} Inverted"
 
+    @property
+    def native_value(self):
+        value = super().native_value
+        if value is None:
+            return None
+        return value * -1
+
 class ACFrequency(SolarEdgeSensorBase):
     device_class = SensorDeviceClass.FREQUENCY
     state_class = SensorStateClass.MEASUREMENT
