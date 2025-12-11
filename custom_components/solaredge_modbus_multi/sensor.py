@@ -608,6 +608,17 @@ class ACPower(SolarEdgeSensorBase):
 
 
 class ACPowerInverted(ACPower):
+    """Inverted AC power sensor for Home Assistant energy dashboard compatibility.
+
+    This class exists solely due to a design decision by the Home Assistant team
+    for their energy dashboard, which requires power to be represented opposite
+    to how a grid-tie inverter normally reports it. The native_value is negated
+    to meet this requirement.
+
+    This does not represent how the inverter or SolarEdge dashboard will represent
+    the same sensor. You should normally refer to the non-inverted version.
+    """
+
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
 
@@ -1944,6 +1955,17 @@ class SolarEdgeBatteryPower(DCPower):
 
 
 class SolarEdgeBatteryPowerInverted(SolarEdgeBatteryPower):
+    """Inverted battery power sensor for Home Assistant energy dashboard compatibility.
+
+    This class exists solely due to a design decision by the Home Assistant team
+    for their energy dashboard, which requires power to be represented opposite
+    to how a grid-tie inverter normally reports it. The native_value is negated
+    to meet this requirement.
+
+    This does not represent how the inverter or SolarEdge dashboard will represent
+    the same sensor. You should normally refer to the non-inverted version.
+    """
+
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
 
