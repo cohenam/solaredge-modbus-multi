@@ -205,6 +205,9 @@ async def async_setup_entry(
         entities.append(SolarEdgeBatteryCurrent(battery, config_entry, coordinator))
         entities.append(SolarEdgeBatteryPower(battery, config_entry, coordinator))
         entities.append(
+            SolarEdgeBatteryPowerInverted(battery, config_entry, coordinator)
+        )
+        entities.append(
             SolarEdgeBatteryEnergyExport(battery, config_entry, coordinator)
         )
         entities.append(
@@ -1938,6 +1941,26 @@ class SolarEdgeBatteryPower(DCPower):
 
         except TypeError:
             return None
+
+
+class SolarEdgeBatteryPowerInverted(SolarEdgeBatteryPower):
+    def __init__(self, platform, config_entry, coordinator):
+        super().__init__(platform, config_entry, coordinator)
+
+    @property
+    def unique_id(self) -> str:
+        return f"{super().unique_id}_inverted"
+
+    @property
+    def name(self) -> str:
+        return f"{super().name} Inverted"
+
+    @property
+    def native_value(self):
+        value = super().native_value
+        if value is None:
+            return None
+        return -value
 
 
 class SolarEdgeBatteryEnergyExport(SolarEdgeSensorBase):
