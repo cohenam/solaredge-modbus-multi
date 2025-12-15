@@ -162,3 +162,26 @@ def create_modbus_response(registers: list[int]) -> MagicMock:
     response.isError.return_value = False
     response.registers = registers
     return response
+
+
+def create_exception_response(exception_code: int):
+    """Create a mock ExceptionResponse with proper type."""
+    from pymodbus.exceptions import ModbusIOException
+    try:
+        from pymodbus.pdu.pdu import ExceptionResponse
+    except ImportError:
+        from pymodbus.pdu import ExceptionResponse
+
+    # Create actual exception instance
+    response = ExceptionResponse(0x01, exception_code)
+    response.isError = MagicMock(return_value=True)
+    return response
+
+
+def create_io_exception_response():
+    """Create a mock ModbusIOException response with proper type."""
+    from pymodbus.exceptions import ModbusIOException
+
+    response = ModbusIOException("Test IO Exception")
+    response.isError = MagicMock(return_value=True)
+    return response
