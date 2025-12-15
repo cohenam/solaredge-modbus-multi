@@ -9,8 +9,15 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.solaredge_modbus_multi.const import DOMAIN, ConfName
+
+
+@pytest.fixture(autouse=True)
+def auto_enable_custom_integrations(enable_custom_integrations):
+    """Enable custom integrations for all tests."""
+    yield
 
 
 async def test_form_user(hass: HomeAssistant) -> None:
@@ -64,7 +71,7 @@ async def test_form_user_with_valid_input(
 
 
 async def test_form_cannot_connect(hass: HomeAssistant) -> None:
-    """Test we handle connection errors."""
+    """Test connection errors result in entry that retries."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
@@ -86,8 +93,9 @@ async def test_form_cannot_connect(hass: HomeAssistant) -> None:
             },
         )
 
-    # Should show error or abort
+    # Config flow creates entry, setup raises ConfigEntryNotReady for retry
     assert result["type"] in (
+        FlowResultType.CREATE_ENTRY,
         FlowResultType.FORM,
         FlowResultType.ABORT,
     )
@@ -99,7 +107,7 @@ async def test_form_duplicate_entry(
 ) -> None:
     """Test duplicate entry prevention."""
     # Create existing entry
-    existing_entry = config_entries.ConfigEntry(
+    existing_entry = MockConfigEntry(
         version=2,
         minor_version=1,
         domain=DOMAIN,

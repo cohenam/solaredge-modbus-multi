@@ -67,7 +67,7 @@ def mock_inverter_registers() -> list[int]:
     """Return mock inverter common register data (40000-40068)."""
     # SunSpec ID (0x53756E53 = "SunS")
     registers = [0x5375, 0x6E53]  # C_SunSpec_ID
-    registers.append(101)  # C_SunSpec_DID (single phase inverter)
+    registers.append(1)  # C_SunSpec_DID (common block = 1)
     registers.append(65)  # C_SunSpec_Length
 
     # C_Manufacturer - "SolarEdge" padded to 32 chars (16 registers)
@@ -103,41 +103,56 @@ def mock_inverter_registers() -> list[int]:
 
 @pytest.fixture
 def mock_inverter_model_registers() -> list[int]:
-    """Return mock inverter model register data (40069-40108)."""
+    """Return mock inverter model register data (40069-40108).
+
+    This represents 40 registers starting at address 40069.
+    The structure follows SunSpec model 101/102/103.
+    """
+    # Convert signed int16 to unsigned for Modbus
+    def s16(val):
+        return val if val >= 0 else val + 65536
+
     return [
-        # AC Current (A) x 10
-        100, 100, 100, 100,  # I_AC_Current, I_AC_CurrentA/B/C
-        0, 0,  # padding
-        -2,  # I_AC_Current_SF
-        # AC Voltage (V) x 10
-        2400, 2400, 2400,  # I_AC_VoltageAB/BC/CA
-        2400, 2400, 2400,  # I_AC_VoltageAN/BN/CN
-        -1,  # I_AC_Voltage_SF
-        # AC Power (W)
-        5000,  # I_AC_Power
-        -1,  # I_AC_Power_SF (x0.1)
-        # AC Frequency (Hz) x 100
-        5000,  # I_AC_Frequency
-        -2,  # I_AC_Frequency_SF
-        # Apparent Power (VA)
-        5000, -1,  # I_AC_VA, I_AC_VA_SF
-        # Reactive Power (VAr)
-        0, -1,  # I_AC_VAR, I_AC_VAR_SF
-        # Power Factor (%)
-        100, -2,  # I_AC_PF, I_AC_PF_SF
-        # Energy (Wh)
-        0, 10000,  # I_AC_Energy_WH (high, low)
-        0,  # I_AC_Energy_WH_SF
-        # DC Current (A)
-        200, -1,  # I_DC_Current, I_DC_Current_SF
-        # DC Voltage (V)
-        4000, -1,  # I_DC_Voltage, I_DC_Voltage_SF
-        # DC Power (W)
-        5100, -1,  # I_DC_Power, I_DC_Power_SF
-        # Temperature (C)
-        450, -1,  # I_Temp_Sink, I_Temp_SF
-        # Status
-        4, 0,  # I_Status, I_Status_Vendor
+        101,  # C_SunSpec_DID (101 = single phase inverter)
+        50,   # C_SunSpec_Length
+        100,  # AC_Current (reg 2)
+        100,  # AC_Current_A (reg 3)
+        100,  # AC_Current_B (reg 4)
+        100,  # AC_Current_C (reg 5)
+        s16(-2),  # AC_Current_SF (reg 6)
+        2400,  # AC_Voltage_AB (reg 7)
+        2400,  # AC_Voltage_BC (reg 8)
+        2400,  # AC_Voltage_CA (reg 9)
+        2400,  # AC_Voltage_AN (reg 10)
+        2400,  # AC_Voltage_BN (reg 11)
+        2400,  # AC_Voltage_CN (reg 12)
+        s16(-1),  # AC_Voltage_SF (reg 13)
+        5000,  # AC_Power (reg 14)
+        s16(-1),  # AC_Power_SF (reg 15)
+        5000,  # AC_Frequency (reg 16)
+        s16(-2),  # AC_Frequency_SF (reg 17)
+        5000,  # AC_VA (reg 18)
+        s16(-1),  # AC_VA_SF (reg 19)
+        0,     # AC_VAR (reg 20)
+        s16(-1),  # AC_VAR_SF (reg 21)
+        100,   # AC_PF (reg 22)
+        s16(-2),  # AC_PF_SF (reg 23)
+        0,     # AC_Energy_WH high (reg 24)
+        10000,  # AC_Energy_WH low (reg 25)
+        0,     # AC_Energy_WH_SF (reg 26)
+        200,   # I_DC_Current (reg 27)
+        s16(-1),  # I_DC_Current_SF (reg 28)
+        4000,  # I_DC_Voltage (reg 29)
+        s16(-1),  # I_DC_Voltage_SF (reg 30)
+        5100,  # I_DC_Power (reg 31)
+        s16(-1),  # I_DC_Power_SF (reg 32)
+        450,   # I_Temp_Cab (reg 33)
+        450,   # I_Temp_Sink (reg 34)
+        0,     # I_Temp_Trns (reg 35)
+        0,     # I_Temp_Other (reg 36)
+        s16(-1),  # I_Temp_SF (reg 37)
+        4,     # I_Status (reg 38) - 4 = MPPT
+        0,     # I_Status_Vendor (reg 39)
     ]
 
 
