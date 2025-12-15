@@ -135,6 +135,7 @@ async def async_setup_entry(
         entities.append(VoltageSensor(meter, config_entry, coordinator, "CA"))
         entities.append(ACFrequency(meter, config_entry, coordinator))
         entities.append(ACPower(meter, config_entry, coordinator))
+        entities.append(ACPowerInverted(meter, config_entry, coordinator))
         entities.append(ACPower(meter, config_entry, coordinator, "A"))
         entities.append(ACPower(meter, config_entry, coordinator, "B"))
         entities.append(ACPower(meter, config_entry, coordinator, "C"))
@@ -608,19 +609,11 @@ class ACPower(SolarEdgeSensorBase):
 
 
 class ACPowerInverted(ACPower):
-    """Inverted AC power sensor for Home Assistant energy dashboard compatibility.
+    """Inverted AC power sensor for HA 2025.12 energy dashboard.
 
-    This class exists solely due to a design decision by the Home Assistant team
-    for their energy dashboard, which requires power to be represented opposite
-    to how a grid-tie inverter normally reports it. The native_value is negated
-    to meet this requirement.
-
-    This does not represent how the inverter or SolarEdge dashboard will represent
-    the same sensor. You should normally refer to the non-inverted version.
+    HA defines grid power as positive=import, negative=export.
+    SolarEdge meters use opposite convention. This class negates values.
     """
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
 
     @property
     def unique_id(self) -> str:
@@ -633,9 +626,7 @@ class ACPowerInverted(ACPower):
     @property
     def native_value(self):
         value = super().native_value
-        if value is None:
-            return None
-        return -value
+        return None if value is None else -value
 
 
 class ACFrequency(SolarEdgeSensorBase):
@@ -1955,19 +1946,7 @@ class SolarEdgeBatteryPower(DCPower):
 
 
 class SolarEdgeBatteryPowerInverted(SolarEdgeBatteryPower):
-    """Inverted battery power sensor for Home Assistant energy dashboard compatibility.
-
-    This class exists solely due to a design decision by the Home Assistant team
-    for their energy dashboard, which requires power to be represented opposite
-    to how a grid-tie inverter normally reports it. The native_value is negated
-    to meet this requirement.
-
-    This does not represent how the inverter or SolarEdge dashboard will represent
-    the same sensor. You should normally refer to the non-inverted version.
-    """
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
+    """Inverted battery power sensor for HA 2025.12 energy dashboard."""
 
     @property
     def unique_id(self) -> str:
@@ -1980,9 +1959,7 @@ class SolarEdgeBatteryPowerInverted(SolarEdgeBatteryPower):
     @property
     def native_value(self):
         value = super().native_value
-        if value is None:
-            return None
-        return -value
+        return None if value is None else -value
 
 
 class SolarEdgeBatteryEnergyExport(SolarEdgeSensorBase):
