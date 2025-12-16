@@ -13,7 +13,6 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from pymodbus.client.mixin import ModbusClientMixin
 
 from custom_components.solaredge_modbus_multi.const import (
@@ -26,7 +25,6 @@ from custom_components.solaredge_modbus_multi.number import (
     SolarEdgeCosPhiSet,
     SolarEdgeCurrentLimit,
     SolarEdgeExternalProductionMax,
-    SolarEdgeNumberBase,
     SolarEdgePowerReduce,
     SolarEdgeSiteLimit,
     StorageACChargeLimit,

@@ -8,11 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
-from homeassistant.core import HomeAssistant
 
 from custom_components.solaredge_modbus_multi.const import (
-    DOMAIN,
-    ConfDefaultFlag,
     ConfName,
 )
 
@@ -170,7 +167,6 @@ def create_modbus_response(registers: list[int]) -> MagicMock:
 
 def create_exception_response(exception_code: int):
     """Create a mock ExceptionResponse with proper type."""
-    from pymodbus.exceptions import ModbusIOException
 
     try:
         from pymodbus.pdu.pdu import ExceptionResponse

@@ -6,21 +6,17 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from pymodbus.exceptions import ConnectionException, ModbusIOException
 
 try:
-    from pymodbus.pdu.pdu import ExceptionResponse
+    from pymodbus.pdu.pdu import ExceptionResponse  # noqa: F401
 except ImportError:
-    from pymodbus.pdu import ExceptionResponse
+    pass
 
 from custom_components.solaredge_modbus_multi.const import (
-    BATTERY_REG_BASE,
     DOMAIN,
-    METER_REG_BASE,
     ModbusExceptions,
-    SunSpecNotImpl,
 )
 from custom_components.solaredge_modbus_multi.hub import (
     DataUpdateFailed,
@@ -31,7 +27,6 @@ from custom_components.solaredge_modbus_multi.hub import (
     ModbusIllegalValue,
     ModbusIOError,
     ModbusReadError,
-    ModbusWriteError,
     SolarEdgeBattery,
     SolarEdgeInverter,
     SolarEdgeMeter,
@@ -324,7 +319,6 @@ async def test_refresh_modbus_data_timeout_with_retries(
     mock_hub, mock_modbus_client
 ) -> None:
     """Test refresh handles timeout with retry logic."""
-    from tests.conftest import create_modbus_response
 
     mock_hub._initalized = True
     mock_hub._retry_limit = 3
@@ -1005,7 +999,7 @@ async def test_meter_read_modbus_data_did_201(mock_hub, mock_modbus_client) -> N
     mock_client = mock_modbus_client.return_value
 
     def read_side_effect(*args, **kwargs):
-        address = kwargs.get("address", args[0] if args else 0)
+        _address = kwargs.get("address", args[0] if args else 0)  # noqa: F841
         count = kwargs.get("count", args[1] if len(args) > 1 else 0)
 
         if count == 67:

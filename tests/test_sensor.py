@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import sys
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from homeassistant.components.sensor import SensorDeviceClass
@@ -11,7 +10,6 @@ from homeassistant.const import (
     PERCENTAGE,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
-    UnitOfEnergy,
     UnitOfFrequency,
     UnitOfPower,
     UnitOfTemperature,
@@ -21,9 +19,6 @@ from homeassistant.core import HomeAssistant
 from custom_components.solaredge_modbus_multi.const import (
     BATTERY_STATUS,
     DEVICE_STATUS,
-    SUNSPEC_SF_RANGE,
-    VENDOR_STATUS,
-    BatteryLimit,
     SunSpecNotImpl,
 )
 
