@@ -80,9 +80,8 @@ async def test_async_setup_entry_success(
     """Test successful setup of config entry."""
     from tests.conftest import create_modbus_response
 
-    # Initialize domain data
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["yaml"] = {}
+    # Initialize domain data via async_setup
+    await async_setup(hass, {})
 
     # Setup mock responses
     mock_client = mock_modbus_client.return_value
@@ -104,7 +103,9 @@ async def test_async_setup_entry_success(
         "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
         mock_modbus_client,
     ):
-        result = await async_setup_entry(hass, mock_config_entry)
+        # Use hass.config_entries.async_setup for proper state management
+        result = await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
 
     assert result is True
     assert mock_config_entry.entry_id in hass.data[DOMAIN]
@@ -140,9 +141,8 @@ async def test_async_unload_entry(
     """Test unloading a config entry cleans up hub resources."""
     from tests.conftest import create_modbus_response
 
-    # Initialize domain data
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["yaml"] = {}
+    # Initialize domain data via async_setup
+    await async_setup(hass, {})
 
     # Setup mock responses
     mock_client = mock_modbus_client.return_value
@@ -161,8 +161,8 @@ async def test_async_unload_entry(
         "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
         mock_modbus_client,
     ):
-        # Setup the entry
-        await async_setup_entry(hass, mock_config_entry)
+        # Setup the entry using proper state management
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
         # Verify entry is loaded and hub exists
@@ -172,15 +172,18 @@ async def test_async_unload_entry(
         assert hub is not None
         assert coordinator is not None
 
-        # Stop the coordinator's refresh timer before unloading
+        # Shutdown coordinator to stop refresh timer before unload
         await coordinator.async_shutdown()
 
-        # Mock platform unloading to always succeed (platform loading is
-        # inconsistent in test environment)
+        # Test unload by calling async_unload_entry directly with mocked platforms
+        # This tests our cleanup logic without depending on platform unload
         with patch.object(
-            hass.config_entries, "async_unload_platforms", return_value=True
+            hass.config_entries,
+            "async_unload_platforms",
+            return_value=True,
         ):
             result = await async_unload_entry(hass, mock_config_entry)
+            await hass.async_block_till_done()
 
     # Verify unload succeeded and data was cleaned up
     assert result is True
@@ -378,9 +381,8 @@ async def test_async_remove_config_entry_device_in_use(
     )
     from tests.conftest import create_modbus_response
 
-    # Initialize domain data
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["yaml"] = {}
+    # Initialize domain data via async_setup
+    await async_setup(hass, {})
 
     # Setup mock responses
     mock_client = mock_modbus_client.return_value
@@ -399,8 +401,8 @@ async def test_async_remove_config_entry_device_in_use(
         "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
         mock_modbus_client,
     ):
-        # Setup the entry
-        await async_setup_entry(hass, mock_config_entry)
+        # Setup the entry using proper state management
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
         # Get the hub to find device identifiers
@@ -438,9 +440,8 @@ async def test_async_remove_config_entry_device_not_in_use(
     )
     from tests.conftest import create_modbus_response
 
-    # Initialize domain data
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["yaml"] = {}
+    # Initialize domain data via async_setup
+    await async_setup(hass, {})
 
     # Setup mock responses
     mock_client = mock_modbus_client.return_value
@@ -459,8 +460,8 @@ async def test_async_remove_config_entry_device_not_in_use(
         "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
         mock_modbus_client,
     ):
-        # Setup the entry
-        await async_setup_entry(hass, mock_config_entry)
+        # Setup the entry using proper state management
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
         # Create a device entry with an unknown identifier
@@ -490,9 +491,8 @@ async def test_coordinator_update_with_pending_writes(
     """Test coordinator waits for pending writes before updating."""
     from tests.conftest import create_modbus_response
 
-    # Initialize domain data
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["yaml"] = {}
+    # Initialize domain data via async_setup
+    await async_setup(hass, {})
 
     # Setup mock responses
     mock_client = mock_modbus_client.return_value
@@ -511,8 +511,8 @@ async def test_coordinator_update_with_pending_writes(
         "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
         mock_modbus_client,
     ):
-        # Setup the entry
-        await async_setup_entry(hass, mock_config_entry)
+        # Setup the entry using proper state management
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
         hub = hass.data[DOMAIN][mock_config_entry.entry_id]["hub"]
@@ -549,15 +549,19 @@ async def test_coordinator_retry_logic_success_on_retry(
     from custom_components.solaredge_modbus_multi.hub import DataUpdateFailed
     from tests.conftest import create_modbus_response
 
-    # Initialize domain data with retry settings
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["yaml"] = {
-        "retry": {
-            "limit": 3,
-            "time": 10,
-            "ratio": 2,
-        }
-    }
+    # Initialize domain data with retry settings via async_setup
+    await async_setup(
+        hass,
+        {
+            DOMAIN: {
+                "retry": {
+                    "limit": 3,
+                    "time": 10,
+                    "ratio": 2,
+                }
+            }
+        },
+    )
 
     # Setup mock responses - fail once, then succeed
     mock_client = mock_modbus_client.return_value
@@ -585,8 +589,8 @@ async def test_coordinator_retry_logic_success_on_retry(
         "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
         mock_modbus_client,
     ):
-        # Setup the entry (first refresh will retry and succeed)
-        result = await async_setup_entry(hass, mock_config_entry)
+        # Setup the entry using proper state management
+        result = await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
         # Verify setup succeeded after retry
@@ -638,9 +642,8 @@ async def test_coordinator_update_raises_update_failed_on_hub_init_failed(
 
     from tests.conftest import create_modbus_response
 
-    # Initialize domain data
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["yaml"] = {}
+    # Initialize domain data via async_setup
+    await async_setup(hass, {})
 
     # Setup mock responses for initial setup
     mock_client = mock_modbus_client.return_value
@@ -659,8 +662,8 @@ async def test_coordinator_update_raises_update_failed_on_hub_init_failed(
         "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
         mock_modbus_client,
     ):
-        # Setup the entry
-        await async_setup_entry(hass, mock_config_entry)
+        # Setup the entry using proper state management
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
         coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
@@ -689,9 +692,8 @@ async def test_coordinator_update_raises_update_failed_on_data_update_failed(
     from custom_components.solaredge_modbus_multi.hub import DataUpdateFailed
     from tests.conftest import create_modbus_response
 
-    # Initialize domain data
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["yaml"] = {}
+    # Initialize domain data via async_setup
+    await async_setup(hass, {})
 
     # Setup mock responses for initial setup
     mock_client = mock_modbus_client.return_value
@@ -710,8 +712,8 @@ async def test_coordinator_update_raises_update_failed_on_data_update_failed(
         "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
         mock_modbus_client,
     ):
-        # Setup the entry
-        await async_setup_entry(hass, mock_config_entry)
+        # Setup the entry using proper config entry lifecycle
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
         coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
