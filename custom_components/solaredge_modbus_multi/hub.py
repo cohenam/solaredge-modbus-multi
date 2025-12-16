@@ -269,7 +269,7 @@ class SolarEdgeModbusMultiHub:
                 self.inverters.append(new_inverter)
 
             except (ModbusReadError, TimeoutError) as e:
-                self.disconnect()
+                await self.disconnect()
                 raise HubInitFailed(f"{e}")
 
             except DeviceInvalid as e:
@@ -301,7 +301,7 @@ class SolarEdgeModbusMultiHub:
                         _LOGGER.debug(f"Found I{inverter_unit_id}M{meter_id}")
 
                     except (ModbusReadError, TimeoutError) as e:
-                        self.disconnect()
+                        await self.disconnect()
                         raise HubInitFailed(f"{e}")
 
                     except DeviceInvalid as e:
@@ -337,7 +337,7 @@ class SolarEdgeModbusMultiHub:
                         _LOGGER.debug(f"Found I{inverter_unit_id}B{battery_id}")
 
                     except (ModbusReadError, TimeoutError) as e:
-                        self.disconnect()
+                        await self.disconnect()
                         raise HubInitFailed(f"{e}")
 
                     except DeviceInvalid as e:
@@ -351,23 +351,23 @@ class SolarEdgeModbusMultiHub:
             await asyncio.gather(*[bat.read_modbus_data() for bat in self.batteries])
 
         except ModbusReadError as e:
-            self.disconnect()
+            await self.disconnect()
             raise HubInitFailed(f"Read error: {e}")
 
         except DeviceInvalid as e:
-            self.disconnect()
+            await self.disconnect()
             raise HubInitFailed(f"Invalid device: {e}")
 
         except ConnectionException as e:
-            self.disconnect()
+            await self.disconnect()
             raise HubInitFailed(f"Connection failed: {e}")
 
         except ModbusIOException as e:
-            self.disconnect()
+            await self.disconnect()
             raise HubInitFailed(f"Modbus error: {e}")
 
         except TimeoutError as e:
-            self.disconnect()
+            await self.disconnect()
             raise HubInitFailed(f"Timeout error: {e}")
 
         self.initalized = True
@@ -384,7 +384,7 @@ class SolarEdgeModbusMultiHub:
                     await self._async_init_solaredge()
 
             except (ConnectionException, ModbusIOException, TimeoutError) as e:
-                self.disconnect()
+                await self.disconnect()
                 ir.async_create_issue(
                     self._hass,
                     DOMAIN,
@@ -399,7 +399,7 @@ class SolarEdgeModbusMultiHub:
             ir.async_delete_issue(self._hass, DOMAIN, "check_configuration")
 
             if not self.keep_modbus_open:
-                self.disconnect()
+                await self.disconnect()
 
             return True
 
@@ -437,23 +437,23 @@ class SolarEdgeModbusMultiHub:
                 )
 
         except ModbusReadError as e:
-            self.disconnect()
+            await self.disconnect()
             raise DataUpdateFailed(f"Update failed: {e}")
 
         except DeviceInvalid as e:
-            self.disconnect()
+            await self.disconnect()
             raise DataUpdateFailed(f"Invalid device: {e}")
 
         except ConnectionException as e:
-            self.disconnect()
+            await self.disconnect()
             raise DataUpdateFailed(f"Connection failed: {e}")
 
         except ModbusIOException as e:
-            self.disconnect()
+            await self.disconnect()
             raise DataUpdateFailed(f"Modbus error: {e}")
 
         except TimeoutError as e:
-            self.disconnect(clear_client=True)
+            await self.disconnect(clear_client=True)
             self._timeout_counter += 1
 
             _LOGGER.debug(
@@ -473,7 +473,7 @@ class SolarEdgeModbusMultiHub:
             self._timeout_counter = 0
 
         if not self.keep_modbus_open:
-            self.disconnect()
+            await self.disconnect()
 
         return True
 
@@ -504,26 +504,26 @@ class SolarEdgeModbusMultiHub:
             _LOGGER.debug((f"Connecting to {self._host}:{self._port} ..."))
             await self._client.connect()
 
-    def disconnect(self, clear_client: bool = False) -> None:
+    async def disconnect(self, clear_client: bool = False) -> None:
         """Disconnect from inverter."""
-
-        if self._client is not None:
-            _LOGGER.debug(
-                (
-                    f"Disconnecting from {self._host}:{self._port} "
-                    f"(clear_client={clear_client})."
+        async with self._modbus_lock:
+            if self._client is not None:
+                _LOGGER.debug(
+                    (
+                        f"Disconnecting from {self._host}:{self._port} "
+                        f"(clear_client={clear_client})."
+                    )
                 )
-            )
-            self._client.close()
+                self._client.close()
 
-            if clear_client:
-                self._client = None
+                if clear_client:
+                    self._client = None
 
     async def shutdown(self) -> None:
         """Shut down the hub and disconnect."""
 
         self.online = False
-        self.disconnect(clear_client=True)
+        await self.disconnect(clear_client=True)
 
     async def modbus_read_holding_registers(self, unit, address, rcount):
         """Read modbus registers from inverter."""
@@ -618,21 +618,21 @@ class SolarEdgeModbusMultiHub:
             _LOGGER.debug(f"Finished with write {address}.")
 
         except ModbusIOException as e:
-            self.disconnect()
+            await self.disconnect()
 
             raise HomeAssistantError(
                 f"Error sending command to inverter ID {unit}: {e}."
             )
 
         except ConnectionException as e:
-            self.disconnect()
+            await self.disconnect()
 
             _LOGGER.error(f"Connection failed: {e}")
             raise HomeAssistantError(f"Connection to inverter ID {unit} failed.")
 
         if result.isError():
             if type(result) is ModbusIOException:
-                self.disconnect()
+                await self.disconnect()
                 _LOGGER.error(f"Write failed: No response from inverter ID {unit}.")
                 raise HomeAssistantError(f"No response from inverter ID {unit}.")
 
@@ -653,7 +653,7 @@ class SolarEdgeModbusMultiHub:
                     _LOGGER.debug(f"Unit {unit} Write IllegalValue: {result}")
                     raise HomeAssistantError(f"Value invalid for device at ID {unit}.")
 
-            self.disconnect()
+            await self.disconnect()
             raise ModbusWriteError(result)
 
     @staticmethod
@@ -770,20 +770,33 @@ class SolarEdgeModbusMultiHub:
 
     @property
     def coordinator_timeout(self) -> int:
+        """Calculate coordinator timeout accounting for lock serialization.
+
+        Although asyncio.gather() is used, the _modbus_lock serializes all
+        Modbus operations. However, the timeout is adjusted to be more realistic:
+        - SolarEdgeTimeouts.Inverter (8.4s) is worst-case, not typical read time
+        - Use base timeout + smaller per-device increment instead of full multiply
+        """
         if not self.initalized:
-            this_timeout = SolarEdgeTimeouts.Inverter * self.number_of_inverters
+            # Init: need time for discovery of all devices
+            # Base timeout + increment per device being discovered
+            this_timeout = SolarEdgeTimeouts.Inverter  # Base for first inverter
             this_timeout += SolarEdgeTimeouts.Init * self.number_of_inverters
-            this_timeout += (SolarEdgeTimeouts.Device * 2) * 3  # max 3 per inverter
-            this_timeout += (SolarEdgeTimeouts.Device * 2) * 2  # max 2 per inverter
+            this_timeout += (SolarEdgeTimeouts.Device * 2) * 3  # max 3 meters
+            this_timeout += (SolarEdgeTimeouts.Device * 2) * 2  # max 2 batteries
             if self.option_detect_extras:
-                this_timeout += (SolarEdgeTimeouts.Read * 3) * self.number_of_inverters
+                this_timeout += SolarEdgeTimeouts.Read * 3 * self.number_of_inverters
 
         else:
-            this_timeout = SolarEdgeTimeouts.Inverter * self.number_of_inverters
+            # Normal polling: lock serializes but typical ops are fast
+            # Use base + actual device counts
+            this_timeout = SolarEdgeTimeouts.Inverter  # Base timeout
+            # Add smaller increment for additional inverters (not full timeout each)
+            this_timeout += SolarEdgeTimeouts.Device * (self.number_of_inverters - 1)
             this_timeout += SolarEdgeTimeouts.Device * self.number_of_meters
             this_timeout += SolarEdgeTimeouts.Device * self.number_of_batteries
             if self.option_detect_extras:
-                this_timeout += (SolarEdgeTimeouts.Read * 3) * self.number_of_inverters
+                this_timeout += SolarEdgeTimeouts.Read * 3
 
         this_timeout = this_timeout / 1000
 

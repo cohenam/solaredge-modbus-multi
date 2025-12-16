@@ -65,7 +65,7 @@ async def test_hub_disconnect(mock_hub, mock_modbus_client) -> None:
         mock_modbus_client,
     ):
         await mock_hub.connect()
-        mock_hub.disconnect()
+        await mock_hub.disconnect()
 
     mock_modbus_client.return_value.close.assert_called_once()
 
@@ -77,7 +77,7 @@ async def test_hub_disconnect_clear_client(mock_hub, mock_modbus_client) -> None
         mock_modbus_client,
     ):
         await mock_hub.connect()
-        mock_hub.disconnect(clear_client=True)
+        await mock_hub.disconnect(clear_client=True)
 
     assert mock_hub._client is None
 
