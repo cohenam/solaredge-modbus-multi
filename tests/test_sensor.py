@@ -1598,9 +1598,9 @@ class TestMMPPTSensors:
             SolarEdgeDCCurrentMMPPT,
         )
 
-        mock_mmppt_platform.inverter.decoded_model["mmppt_1"][
-            "DCA"
-        ] = SunSpecNotImpl.INT16
+        mock_mmppt_platform.inverter.decoded_model["mmppt_1"]["DCA"] = (
+            SunSpecNotImpl.INT16
+        )
 
         sensor = SolarEdgeDCCurrentMMPPT(
             mock_mmppt_platform, mock_config_entry, mock_coordinator
@@ -1675,9 +1675,9 @@ class TestMMPPTSensors:
             SolarEdgeDCPowerMMPPT,
         )
 
-        mock_mmppt_platform.inverter.decoded_model["mmppt_1"][
-            "DCW"
-        ] = SunSpecNotImpl.INT16
+        mock_mmppt_platform.inverter.decoded_model["mmppt_1"]["DCW"] = (
+            SunSpecNotImpl.INT16
+        )
 
         sensor = SolarEdgeDCPowerMMPPT(
             mock_mmppt_platform, mock_config_entry, mock_coordinator
@@ -1712,9 +1712,9 @@ class TestMMPPTSensors:
             SolarEdgeTemperatureMMPPT,
         )
 
-        mock_mmppt_platform.inverter.decoded_model["mmppt_1"][
-            "Tmp"
-        ] = SunSpecNotImpl.INT16
+        mock_mmppt_platform.inverter.decoded_model["mmppt_1"]["Tmp"] = (
+            SunSpecNotImpl.INT16
+        )
 
         sensor = SolarEdgeTemperatureMMPPT(
             mock_mmppt_platform, mock_config_entry, mock_coordinator
