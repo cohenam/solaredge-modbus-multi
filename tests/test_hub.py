@@ -14,10 +14,7 @@ try:
 except ImportError:
     pass
 
-from custom_components.solaredge_modbus_multi.const import (
-    DOMAIN,
-    ModbusExceptions,
-)
+from custom_components.solaredge_modbus_multi.const import DOMAIN, ModbusExceptions
 from custom_components.solaredge_modbus_multi.hub import (
     DataUpdateFailed,
     DeviceInvalid,

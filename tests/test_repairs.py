@@ -10,10 +10,7 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.solaredge_modbus_multi.const import (
-    DOMAIN,
-    ConfName,
-)
+from custom_components.solaredge_modbus_multi.const import DOMAIN, ConfName
 from custom_components.solaredge_modbus_multi.repairs import (
     CheckConfigurationRepairFlow,
     async_create_fix_flow,

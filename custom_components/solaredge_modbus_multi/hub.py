@@ -426,9 +426,15 @@ class SolarEdgeModbusMultiHub:
         try:
             async with asyncio.timeout(self.coordinator_timeout):
                 # Read all devices in parallel
-                await asyncio.gather(*[inv.read_modbus_data() for inv in self.inverters])
-                await asyncio.gather(*[meter.read_modbus_data() for meter in self.meters])
-                await asyncio.gather(*[bat.read_modbus_data() for bat in self.batteries])
+                await asyncio.gather(
+                    *[inv.read_modbus_data() for inv in self.inverters]
+                )
+                await asyncio.gather(
+                    *[meter.read_modbus_data() for meter in self.meters]
+                )
+                await asyncio.gather(
+                    *[bat.read_modbus_data() for bat in self.batteries]
+                )
 
         except ModbusReadError as e:
             self.disconnect()
@@ -622,42 +628,30 @@ class SolarEdgeModbusMultiHub:
             self.disconnect()
 
             _LOGGER.error(f"Connection failed: {e}")
-            raise HomeAssistantError(
-                f"Connection to inverter ID {unit} failed."
-            )
+            raise HomeAssistantError(f"Connection to inverter ID {unit} failed.")
 
         if result.isError():
             if type(result) is ModbusIOException:
                 self.disconnect()
-                _LOGGER.error(
-                    f"Write failed: No response from inverter ID {unit}."
-                )
-                raise HomeAssistantError(
-                    f"No response from inverter ID {unit}."
-                )
+                _LOGGER.error(f"Write failed: No response from inverter ID {unit}.")
+                raise HomeAssistantError(f"No response from inverter ID {unit}.")
 
             if type(result) is ExceptionResponse:
                 if result.exception_code == ModbusExceptions.IllegalAddress:
-                    _LOGGER.debug(
-                        f"Unit {unit} Write IllegalAddress: {result}"
-                    )
+                    _LOGGER.debug(f"Unit {unit} Write IllegalAddress: {result}")
                     raise HomeAssistantError(
                         f"Address not supported at device at ID {unit}."
                     )
 
                 if result.exception_code == ModbusExceptions.IllegalFunction:
-                    _LOGGER.debug(
-                        f"Unit {unit} Write IllegalFunction: {result}"
-                    )
+                    _LOGGER.debug(f"Unit {unit} Write IllegalFunction: {result}")
                     raise HomeAssistantError(
                         f"Function not supported by device at ID {unit}."
                     )
 
                 if result.exception_code == ModbusExceptions.IllegalValue:
                     _LOGGER.debug(f"Unit {unit} Write IllegalValue: {result}")
-                    raise HomeAssistantError(
-                        f"Value invalid for device at ID {unit}."
-                    )
+                    raise HomeAssistantError(f"Value invalid for device at ID {unit}.")
 
             self.disconnect()
             raise ModbusWriteError(result)

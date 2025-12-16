@@ -1726,9 +1726,7 @@ class TestMMPPTSensors:
         self, mock_inverter_platform, mock_config_entry, mock_coordinator
     ):
         """Test MMPPT events sensor."""
-        from custom_components.solaredge_modbus_multi.sensor import (
-            SolarEdgeMMPPTEvents,
-        )
+        from custom_components.solaredge_modbus_multi.sensor import SolarEdgeMMPPTEvents
 
         mock_inverter_platform.decoded_model["mmppt_Events"] = 0x0
 
@@ -1748,9 +1746,7 @@ class TestMMPPTSensors:
         self, mock_inverter_platform, mock_config_entry, mock_coordinator
     ):
         """Test MMPPT events sensor unavailable when not impl."""
-        from custom_components.solaredge_modbus_multi.sensor import (
-            SolarEdgeMMPPTEvents,
-        )
+        from custom_components.solaredge_modbus_multi.sensor import SolarEdgeMMPPTEvents
 
         mock_inverter_platform.decoded_model["mmppt_Events"] = SunSpecNotImpl.UINT32
 
