@@ -72,28 +72,31 @@ def mock_inverter_registers() -> list[int]:
 
     # C_Manufacturer - "SolarEdge" padded to 32 chars (16 registers)
     manufacturer = "SolarEdge".ljust(32, "\x00")
-    registers.extend([ord(manufacturer[i]) << 8 | ord(manufacturer[i+1])
-                     for i in range(0, 32, 2)])
+    registers.extend(
+        [ord(manufacturer[i]) << 8 | ord(manufacturer[i + 1]) for i in range(0, 32, 2)]
+    )
 
     # C_Model - "SE10K" padded to 32 chars (16 registers)
     model = "SE10K".ljust(32, "\x00")
-    registers.extend([ord(model[i]) << 8 | ord(model[i+1])
-                     for i in range(0, 32, 2)])
+    registers.extend([ord(model[i]) << 8 | ord(model[i + 1]) for i in range(0, 32, 2)])
 
     # C_Option - padded to 16 chars (8 registers)
     option = "".ljust(16, "\x00")
-    registers.extend([ord(option[i]) << 8 | ord(option[i+1])
-                     for i in range(0, 16, 2)])
+    registers.extend(
+        [ord(option[i]) << 8 | ord(option[i + 1]) for i in range(0, 16, 2)]
+    )
 
     # C_Version - "1.0.0" padded to 16 chars (8 registers)
     version = "1.0.0".ljust(16, "\x00")
-    registers.extend([ord(version[i]) << 8 | ord(version[i+1])
-                     for i in range(0, 16, 2)])
+    registers.extend(
+        [ord(version[i]) << 8 | ord(version[i + 1]) for i in range(0, 16, 2)]
+    )
 
     # C_SerialNumber - "123456789" padded to 32 chars (16 registers)
     serial = "123456789".ljust(32, "\x00")
-    registers.extend([ord(serial[i]) << 8 | ord(serial[i+1])
-                     for i in range(0, 32, 2)])
+    registers.extend(
+        [ord(serial[i]) << 8 | ord(serial[i + 1]) for i in range(0, 32, 2)]
+    )
 
     # C_Device_address
     registers.append(1)
@@ -108,13 +111,14 @@ def mock_inverter_model_registers() -> list[int]:
     This represents 40 registers starting at address 40069.
     The structure follows SunSpec model 101/102/103.
     """
+
     # Convert signed int16 to unsigned for Modbus
     def s16(val):
         return val if val >= 0 else val + 65536
 
     return [
         101,  # C_SunSpec_DID (101 = single phase inverter)
-        50,   # C_SunSpec_Length
+        50,  # C_SunSpec_Length
         100,  # AC_Current (reg 2)
         100,  # AC_Current_A (reg 3)
         100,  # AC_Current_B (reg 4)
@@ -133,26 +137,26 @@ def mock_inverter_model_registers() -> list[int]:
         s16(-2),  # AC_Frequency_SF (reg 17)
         5000,  # AC_VA (reg 18)
         s16(-1),  # AC_VA_SF (reg 19)
-        0,     # AC_VAR (reg 20)
+        0,  # AC_VAR (reg 20)
         s16(-1),  # AC_VAR_SF (reg 21)
-        100,   # AC_PF (reg 22)
+        100,  # AC_PF (reg 22)
         s16(-2),  # AC_PF_SF (reg 23)
-        0,     # AC_Energy_WH high (reg 24)
+        0,  # AC_Energy_WH high (reg 24)
         10000,  # AC_Energy_WH low (reg 25)
-        0,     # AC_Energy_WH_SF (reg 26)
-        200,   # I_DC_Current (reg 27)
+        0,  # AC_Energy_WH_SF (reg 26)
+        200,  # I_DC_Current (reg 27)
         s16(-1),  # I_DC_Current_SF (reg 28)
         4000,  # I_DC_Voltage (reg 29)
         s16(-1),  # I_DC_Voltage_SF (reg 30)
         5100,  # I_DC_Power (reg 31)
         s16(-1),  # I_DC_Power_SF (reg 32)
-        450,   # I_Temp_Cab (reg 33)
-        450,   # I_Temp_Sink (reg 34)
-        0,     # I_Temp_Trns (reg 35)
-        0,     # I_Temp_Other (reg 36)
+        450,  # I_Temp_Cab (reg 33)
+        450,  # I_Temp_Sink (reg 34)
+        0,  # I_Temp_Trns (reg 35)
+        0,  # I_Temp_Other (reg 36)
         s16(-1),  # I_Temp_SF (reg 37)
-        4,     # I_Status (reg 38) - 4 = MPPT
-        0,     # I_Status_Vendor (reg 39)
+        4,  # I_Status (reg 38) - 4 = MPPT
+        0,  # I_Status_Vendor (reg 39)
     ]
 
 
@@ -167,6 +171,7 @@ def create_modbus_response(registers: list[int]) -> MagicMock:
 def create_exception_response(exception_code: int):
     """Create a mock ExceptionResponse with proper type."""
     from pymodbus.exceptions import ModbusIOException
+
     try:
         from pymodbus.pdu.pdu import ExceptionResponse
     except ImportError:

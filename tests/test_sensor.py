@@ -1202,11 +1202,31 @@ class TestSunSpecNotImplHandling:
     @pytest.mark.parametrize(
         "sensor_class,platform_fixture,field_name,sunspec_value",
         [
-            (ACCurrentSensor, "mock_inverter_platform", "AC_Current", SunSpecNotImpl.UINT16),
-            (VoltageSensor, "mock_inverter_platform", "AC_Voltage_AB", SunSpecNotImpl.UINT16),
+            (
+                ACCurrentSensor,
+                "mock_inverter_platform",
+                "AC_Current",
+                SunSpecNotImpl.UINT16,
+            ),
+            (
+                VoltageSensor,
+                "mock_inverter_platform",
+                "AC_Voltage_AB",
+                SunSpecNotImpl.UINT16,
+            ),
             (ACPower, "mock_inverter_platform", "AC_Power", SunSpecNotImpl.INT16),
-            (DCCurrent, "mock_inverter_platform", "I_DC_Current", SunSpecNotImpl.UINT16),
-            (DCVoltage, "mock_inverter_platform", "I_DC_Voltage", SunSpecNotImpl.UINT16),
+            (
+                DCCurrent,
+                "mock_inverter_platform",
+                "I_DC_Current",
+                SunSpecNotImpl.UINT16,
+            ),
+            (
+                DCVoltage,
+                "mock_inverter_platform",
+                "I_DC_Voltage",
+                SunSpecNotImpl.UINT16,
+            ),
             (DCPower, "mock_inverter_platform", "I_DC_Power", SunSpecNotImpl.INT16),
         ],
     )
@@ -1225,7 +1245,9 @@ class TestSunSpecNotImplHandling:
         platform.decoded_model[field_name] = sunspec_value
 
         if sensor_class == VoltageSensor:
-            sensor = sensor_class(platform, mock_config_entry, mock_coordinator, phase="AB")
+            sensor = sensor_class(
+                platform, mock_config_entry, mock_coordinator, phase="AB"
+            )
         else:
             sensor = sensor_class(platform, mock_config_entry, mock_coordinator)
 
@@ -1581,9 +1603,9 @@ class TestMMPPTSensors:
             SolarEdgeDCCurrentMMPPT,
         )
 
-        mock_mmppt_platform.inverter.decoded_model["mmppt_1"]["DCA"] = (
-            SunSpecNotImpl.INT16
-        )
+        mock_mmppt_platform.inverter.decoded_model["mmppt_1"][
+            "DCA"
+        ] = SunSpecNotImpl.INT16
 
         sensor = SolarEdgeDCCurrentMMPPT(
             mock_mmppt_platform, mock_config_entry, mock_coordinator
@@ -1658,9 +1680,9 @@ class TestMMPPTSensors:
             SolarEdgeDCPowerMMPPT,
         )
 
-        mock_mmppt_platform.inverter.decoded_model["mmppt_1"]["DCW"] = (
-            SunSpecNotImpl.INT16
-        )
+        mock_mmppt_platform.inverter.decoded_model["mmppt_1"][
+            "DCW"
+        ] = SunSpecNotImpl.INT16
 
         sensor = SolarEdgeDCPowerMMPPT(
             mock_mmppt_platform, mock_config_entry, mock_coordinator
@@ -1695,9 +1717,9 @@ class TestMMPPTSensors:
             SolarEdgeTemperatureMMPPT,
         )
 
-        mock_mmppt_platform.inverter.decoded_model["mmppt_1"]["Tmp"] = (
-            SunSpecNotImpl.INT16
-        )
+        mock_mmppt_platform.inverter.decoded_model["mmppt_1"][
+            "Tmp"
+        ] = SunSpecNotImpl.INT16
 
         sensor = SolarEdgeTemperatureMMPPT(
             mock_mmppt_platform, mock_config_entry, mock_coordinator
@@ -1772,9 +1794,7 @@ class TestPowerControlSensors:
         """Test RRCR sensor returns None when not impl."""
         from custom_components.solaredge_modbus_multi.sensor import SolarEdgeRRCR
 
-        mock_inverter_with_power_control.decoded_model["I_RRCR"] = (
-            SunSpecNotImpl.UINT16
-        )
+        mock_inverter_with_power_control.decoded_model["I_RRCR"] = SunSpecNotImpl.UINT16
 
         sensor = SolarEdgeRRCR(
             mock_inverter_with_power_control, mock_config_entry, mock_coordinator
@@ -1875,8 +1895,9 @@ class TestPowerControlSensors:
         self, mock_inverter_with_power_control, mock_config_entry, mock_coordinator
     ):
         """Test CosPhi returns None when not impl."""
-        from custom_components.solaredge_modbus_multi.sensor import SolarEdgeCosPhi
         import struct
+
+        from custom_components.solaredge_modbus_multi.sensor import SolarEdgeCosPhi
 
         # Set to FLOAT32 not impl
         not_impl_float = struct.unpack("!f", bytes.fromhex("7FC00000"))[0]
@@ -2073,13 +2094,16 @@ class TestMeterEnergySensors:
         self, mock_meter_with_energy, mock_config_entry, mock_coordinator
     ):
         """Test meter VAh exported sensor."""
-        from custom_components.solaredge_modbus_multi.sensor import MeterVAhIE
         from custom_components.solaredge_modbus_multi.const import (
             ENERGY_VOLT_AMPERE_HOUR,
         )
+        from custom_components.solaredge_modbus_multi.sensor import MeterVAhIE
 
         sensor = MeterVAhIE(
-            mock_meter_with_energy, mock_config_entry, mock_coordinator, phase="Exported"
+            mock_meter_with_energy,
+            mock_config_entry,
+            mock_coordinator,
+            phase="Exported",
         )
 
         assert sensor.device_class == SensorDeviceClass.ENERGY
@@ -2096,7 +2120,10 @@ class TestMeterEnergySensors:
         from custom_components.solaredge_modbus_multi.sensor import MeterVAhIE
 
         sensor = MeterVAhIE(
-            mock_meter_with_energy, mock_config_entry, mock_coordinator, phase="Imported"
+            mock_meter_with_energy,
+            mock_config_entry,
+            mock_coordinator,
+            phase="Imported",
         )
 
         assert sensor.unique_id == "se_meter_1_imported_vah"
@@ -2107,13 +2134,16 @@ class TestMeterEnergySensors:
         self, mock_meter_with_energy, mock_config_entry, mock_coordinator
     ):
         """Test meter VAh returns None when not impl."""
-        from custom_components.solaredge_modbus_multi.sensor import MeterVAhIE
         from custom_components.solaredge_modbus_multi.const import SunSpecAccum
+        from custom_components.solaredge_modbus_multi.sensor import MeterVAhIE
 
         mock_meter_with_energy.decoded_model["M_VAh_Exported"] = SunSpecAccum.NA32
 
         sensor = MeterVAhIE(
-            mock_meter_with_energy, mock_config_entry, mock_coordinator, phase="Exported"
+            mock_meter_with_energy,
+            mock_config_entry,
+            mock_coordinator,
+            phase="Exported",
         )
 
         assert sensor.native_value is None
@@ -2122,10 +2152,10 @@ class TestMeterEnergySensors:
         self, mock_meter_with_energy, mock_config_entry, mock_coordinator
     ):
         """Test meter varh import Q1 sensor."""
-        from custom_components.solaredge_modbus_multi.sensor import MetervarhIE
         from custom_components.solaredge_modbus_multi.const import (
             ENERGY_VOLT_AMPERE_REACTIVE_HOUR,
         )
+        from custom_components.solaredge_modbus_multi.sensor import MetervarhIE
 
         sensor = MetervarhIE(
             mock_meter_with_energy,
@@ -2162,8 +2192,8 @@ class TestMeterEnergySensors:
         self, mock_meter_with_energy, mock_config_entry, mock_coordinator
     ):
         """Test meter varh returns None when not impl."""
-        from custom_components.solaredge_modbus_multi.sensor import MetervarhIE
         from custom_components.solaredge_modbus_multi.const import SunSpecAccum
+        from custom_components.solaredge_modbus_multi.sensor import MetervarhIE
 
         mock_meter_with_energy.decoded_model["M_varh_Import_Q1"] = SunSpecAccum.NA32
 
@@ -2360,10 +2390,11 @@ class TestBatteryPowerSensors:
         self, mock_battery_platform, mock_config_entry, mock_coordinator
     ):
         """Test battery max charge power unavailable when not impl."""
+        import struct
+
         from custom_components.solaredge_modbus_multi.sensor import (
             SolarEdgeBatteryMaxChargePower,
         )
-        import struct
 
         not_impl_float = struct.unpack("!f", bytes.fromhex("7FC00000"))[0]
         mock_battery_platform.decoded_model["B_MaxChargePower"] = not_impl_float

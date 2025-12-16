@@ -134,9 +134,8 @@ class TestFormatValues:
 
         # Negative integers should still be converted to hex
         assert isinstance(result["negative"], str)
-        assert (
-            result["negative"].startswith("-0x")
-            or result["negative"].startswith("0x")
+        assert result["negative"].startswith("-0x") or result["negative"].startswith(
+            "0x"
         )
         assert result["positive"] == "0x1"
 
@@ -281,9 +280,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         # Check basic structure
         assert "pymodbus_version" in result
@@ -300,18 +297,17 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {"host": "192.168.1.100"}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         # Check config redaction
         config_dict = result["config_entry"]
-        assert "host" not in config_dict.get("data", {}) or config_dict["data"][
-            "host"
-        ] == "**REDACTED**"
-        assert "unique_id" not in config_dict or config_dict[
-            "unique_id"
-        ] == "**REDACTED**"
+        assert (
+            "host" not in config_dict.get("data", {})
+            or config_dict["data"]["host"] == "**REDACTED**"
+        )
+        assert (
+            "unique_id" not in config_dict or config_dict["unique_id"] == "**REDACTED**"
+        )
 
         # Check yaml redaction
         yaml_dict = result["yaml"]
@@ -329,9 +325,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         # Check inverter data
         assert "inverter_unit_id_1" in result
@@ -365,9 +359,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         inverter_data = result["inverter_unit_id_1"]
 
@@ -405,9 +397,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         # Check both inverters are present
         assert "inverter_unit_id_1" in result
@@ -415,9 +405,7 @@ class TestAsyncGetConfigEntryDiagnostics:
 
         # Verify different power values are formatted correctly
         # 5000 in hex
-        assert (
-            result["inverter_unit_id_1"]["model"]["AC_Power"] == "0x1388"
-        )
+        assert result["inverter_unit_id_1"]["model"]["AC_Power"] == "0x1388"
         # 3000 in hex
         assert result["inverter_unit_id_2"]["model"]["AC_Power"] == "0xbb8"
 
@@ -432,9 +420,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         # Check meter data
         assert "meter_id_1" in result
@@ -462,9 +448,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         meter_data = result["meter_id_1"]
 
@@ -490,9 +474,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         # Check battery data
         assert "battery_id_1" in result
@@ -521,9 +503,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         battery_data = result["battery_id_1"]
 
@@ -557,9 +537,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         # Check all devices are present
         assert "pymodbus_version" in result
@@ -595,9 +573,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         # Check all meters are present
         assert "meter_id_1" in result
@@ -635,9 +611,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         # Check all batteries are present
         assert "battery_id_1" in result
@@ -646,17 +620,11 @@ class TestAsyncGetConfigEntryDiagnostics:
 
         # Verify different SOC values
         # 75 in hex
-        assert (
-            result["battery_id_1"]["model"]["B_StateOfCharge"] == "0x4b"
-        )
+        assert result["battery_id_1"]["model"]["B_StateOfCharge"] == "0x4b"
         # 50 in hex
-        assert (
-            result["battery_id_2"]["model"]["B_StateOfCharge"] == "0x32"
-        )
+        assert result["battery_id_2"]["model"]["B_StateOfCharge"] == "0x32"
         # 90 in hex
-        assert (
-            result["battery_id_3"]["model"]["B_StateOfCharge"] == "0x5a"
-        )
+        assert result["battery_id_3"]["model"]["B_StateOfCharge"] == "0x5a"
 
     async def test_diagnostics_with_mmppt_inverter(
         self, hass: HomeAssistant, mock_config_entry, mock_hub, mock_inverter
@@ -674,9 +642,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         inverter_data = result["inverter_unit_id_1"]
         assert inverter_data["is_mmppt"] is True
@@ -700,9 +666,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         inverter_data = result["inverter_unit_id_1"]
         assert inverter_data["has_battery"] is True
@@ -725,9 +689,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = {}
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         inverter_data = result["inverter_unit_id_1"]
         assert inverter_data["global_power_control"] is True
@@ -748,9 +710,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         hass.data[DOMAIN]["yaml"] = yaml_config
         hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
 
-        result = await async_get_config_entry_diagnostics(
-            hass, mock_config_entry
-        )
+        result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
         assert "yaml" in result
         yaml_data = result["yaml"]

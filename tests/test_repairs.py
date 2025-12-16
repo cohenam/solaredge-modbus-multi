@@ -106,9 +106,7 @@ class TestCheckConfigurationRepairFlow:
             ConfName.DEVICE_LIST: "1,2,3",
         }
 
-        with patch.object(
-            hass.config_entries, "async_update_entry"
-        ) as mock_update:
+        with patch.object(hass.config_entries, "async_update_entry") as mock_update:
             result = await repair_flow.async_step_confirm(user_input=user_input)
 
         assert result["type"] == "create_entry"
@@ -154,9 +152,7 @@ class TestCheckConfigurationRepairFlow:
             ConfName.DEVICE_LIST: " 1 , 2 , 3 ",
         }
 
-        with patch.object(
-            hass.config_entries, "async_update_entry"
-        ) as mock_update:
+        with patch.object(hass.config_entries, "async_update_entry") as mock_update:
             result = await repair_flow.async_step_confirm(user_input=user_input)
 
         assert result["type"] == "create_entry"
@@ -438,9 +434,7 @@ class TestCheckConfigurationRepairFlow:
             ConfName.DEVICE_LIST: "1-5",
         }
 
-        with patch.object(
-            hass.config_entries, "async_update_entry"
-        ) as mock_update:
+        with patch.object(hass.config_entries, "async_update_entry") as mock_update:
             result = await repair_flow.async_step_confirm(user_input=user_input)
 
         assert result["type"] == "create_entry"
@@ -460,9 +454,7 @@ class TestCheckConfigurationRepairFlow:
             ConfName.DEVICE_LIST: "1,3-5,10",
         }
 
-        with patch.object(
-            hass.config_entries, "async_update_entry"
-        ) as mock_update:
+        with patch.object(hass.config_entries, "async_update_entry") as mock_update:
             result = await repair_flow.async_step_confirm(user_input=user_input)
 
         assert result["type"] == "create_entry"
@@ -506,9 +498,7 @@ class TestAsyncCreateFixFlow:
         """Test creating CheckConfigurationRepairFlow."""
         data = {"entry_id": mock_config_entry.entry_id}
 
-        flow = await async_create_fix_flow(
-            hass, "check_configuration", data
-        )
+        flow = await async_create_fix_flow(hass, "check_configuration", data)
 
         assert isinstance(flow, CheckConfigurationRepairFlow)
         assert flow._entry == mock_config_entry
@@ -519,9 +509,7 @@ class TestAsyncCreateFixFlow:
         """Test creating flow for unknown issue_id returns None."""
         data = {"entry_id": mock_config_entry.entry_id}
 
-        flow = await async_create_fix_flow(
-            hass, "unknown_issue", data
-        )
+        flow = await async_create_fix_flow(hass, "unknown_issue", data)
 
         assert flow is None
 
@@ -531,9 +519,7 @@ class TestAsyncCreateFixFlow:
         """Test creating flow when config entry doesn't exist returns None."""
         data = {"entry_id": "non_existent_entry_id"}
 
-        flow = await async_create_fix_flow(
-            hass, "check_configuration", data
-        )
+        flow = await async_create_fix_flow(hass, "check_configuration", data)
 
         assert flow is None
 
@@ -555,9 +541,7 @@ class TestRepairFlowIntegration:
         """Test complete repair flow from creation to completion."""
         # Create the flow
         data = {"entry_id": mock_config_entry.entry_id}
-        flow = await async_create_fix_flow(
-            hass, "check_configuration", data
-        )
+        flow = await async_create_fix_flow(hass, "check_configuration", data)
 
         assert isinstance(flow, CheckConfigurationRepairFlow)
         flow.hass = hass
@@ -584,9 +568,7 @@ class TestRepairFlowIntegration:
     ) -> None:
         """Test repair flow with initial errors, then successful correction."""
         data = {"entry_id": mock_config_entry.entry_id}
-        flow = await async_create_fix_flow(
-            hass, "check_configuration", data
-        )
+        flow = await async_create_fix_flow(hass, "check_configuration", data)
 
         flow.hass = hass
 

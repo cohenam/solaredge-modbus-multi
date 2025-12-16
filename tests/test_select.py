@@ -19,10 +19,10 @@ from custom_components.solaredge_modbus_multi.const import (
     SunSpecNotImpl,
 )
 from custom_components.solaredge_modbus_multi.select import (
-    SolarEdgeReactivePowerMode,
-    SolarEdgeSelectBase,
     SolaredgeLimitControl,
     SolaredgeLimitControlMode,
+    SolarEdgeReactivePowerMode,
+    SolarEdgeSelectBase,
     StorageACChargePolicy,
     StorageCommandMode,
     StorageControlMode,
@@ -328,9 +328,7 @@ class TestStorageControlMode:
         )
         assert select.entity_registry_enabled_default is False
 
-    def test_options(
-        self, mock_inverter_platform, mock_config_entry, mock_coordinator
-    ):
+    def test_options(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
         """Test options property."""
         select = StorageControlMode(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -476,9 +474,7 @@ class TestStorageACChargePolicy:
         )
         assert select.entity_registry_enabled_default is True
 
-    def test_options(
-        self, mock_inverter_platform, mock_config_entry, mock_coordinator
-    ):
+    def test_options(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
         """Test options property."""
         select = StorageACChargePolicy(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -571,9 +567,7 @@ class TestStorageDefaultMode:
         )
         assert select.entity_registry_enabled_default is True
 
-    def test_options(
-        self, mock_inverter_platform, mock_config_entry, mock_coordinator
-    ):
+    def test_options(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
         """Test options property."""
         select = StorageDefaultMode(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -689,9 +683,7 @@ class TestStorageCommandMode:
         )
         assert select.entity_registry_enabled_default is True
 
-    def test_options(
-        self, mock_inverter_platform, mock_config_entry, mock_coordinator
-    ):
+    def test_options(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
         """Test options property."""
         select = StorageCommandMode(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -797,9 +789,7 @@ class TestSolaredgeLimitControlMode:
         )
         assert select.name == "Limit Control Mode"
 
-    def test_options(
-        self, mock_inverter_platform, mock_config_entry, mock_coordinator
-    ):
+    def test_options(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
         """Test options property."""
         select = SolaredgeLimitControlMode(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -861,7 +851,9 @@ class TestSolaredgeLimitControlMode:
         self, mock_inverter_platform, mock_config_entry, mock_coordinator
     ):
         """Test that high bits (beyond 0-2) are ignored."""
-        mock_inverter_platform.decoded_model["E_Lim_Ctl_Mode"] = 0b11110010  # Bit 1 + high bits
+        mock_inverter_platform.decoded_model["E_Lim_Ctl_Mode"] = (
+            0b11110010  # Bit 1 + high bits
+        )
         select = SolaredgeLimitControlMode(
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
@@ -1046,9 +1038,7 @@ class TestSolaredgeLimitControl:
         )
         assert select.name == "Limit Control"
 
-    def test_options(
-        self, mock_inverter_platform, mock_config_entry, mock_coordinator
-    ):
+    def test_options(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
         """Test options property."""
         select = SolaredgeLimitControl(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -1170,9 +1160,7 @@ class TestSolarEdgeReactivePowerMode:
         )
         assert select.name == "Reactive Power Mode"
 
-    def test_options(
-        self, mock_inverter_platform, mock_config_entry, mock_coordinator
-    ):
+    def test_options(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
         """Test options property."""
         select = SolarEdgeReactivePowerMode(
             mock_inverter_platform, mock_config_entry, mock_coordinator

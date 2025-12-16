@@ -236,6 +236,7 @@ async def test_async_setup_entry_data_update_failed(
 async def test_async_migrate_entry_v1_to_v2(hass: HomeAssistant) -> None:
     """Test migration from version 1 to version 2."""
     from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
+
     from custom_components.solaredge_modbus_multi import async_migrate_entry
     from custom_components.solaredge_modbus_multi.const import ConfName
 
@@ -285,6 +286,7 @@ async def test_async_migrate_entry_v1_to_v2(hass: HomeAssistant) -> None:
 async def test_async_migrate_entry_v2_0_to_v2_1(hass: HomeAssistant) -> None:
     """Test migration from version 2.0 to version 2.1."""
     from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
+
     from custom_components.solaredge_modbus_multi import async_migrate_entry
     from custom_components.solaredge_modbus_multi.const import ConfName
 
@@ -321,6 +323,7 @@ async def test_async_migrate_entry_v2_0_to_v2_1(hass: HomeAssistant) -> None:
 async def test_async_migrate_entry_unsupported_version(hass: HomeAssistant) -> None:
     """Test migration fails for unsupported version."""
     from homeassistant.const import CONF_HOST, CONF_PORT
+
     from custom_components.solaredge_modbus_multi import async_migrate_entry
 
     # Create a version 3 config entry (unsupported)
@@ -370,6 +373,7 @@ async def test_async_remove_config_entry_device_in_use(
 ) -> None:
     """Test device removal fails if device is in use."""
     from homeassistant.helpers import device_registry as dr
+
     from custom_components.solaredge_modbus_multi import (
         async_remove_config_entry_device,
     )
@@ -429,6 +433,7 @@ async def test_async_remove_config_entry_device_not_in_use(
 ) -> None:
     """Test device removal succeeds if device is not in use."""
     from homeassistant.helpers import device_registry as dr
+
     from custom_components.solaredge_modbus_multi import (
         async_remove_config_entry_device,
     )
@@ -631,6 +636,7 @@ async def test_coordinator_update_raises_update_failed_on_hub_init_failed(
 ) -> None:
     """Test coordinator converts HubInitFailed to UpdateFailed."""
     from homeassistant.helpers.update_coordinator import UpdateFailed
+
     from tests.conftest import create_modbus_response
 
     # Initialize domain data
@@ -680,6 +686,7 @@ async def test_coordinator_update_raises_update_failed_on_data_update_failed(
 ) -> None:
     """Test coordinator converts DataUpdateFailed to UpdateFailed."""
     from homeassistant.helpers.update_coordinator import UpdateFailed
+
     from custom_components.solaredge_modbus_multi.hub import DataUpdateFailed
     from tests.conftest import create_modbus_response
 

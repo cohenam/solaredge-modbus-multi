@@ -16,8 +16,8 @@ except ImportError:
     from pymodbus.pdu import ExceptionResponse
 
 from custom_components.solaredge_modbus_multi.const import (
-    DOMAIN,
     BATTERY_REG_BASE,
+    DOMAIN,
     METER_REG_BASE,
     ModbusExceptions,
     SunSpecNotImpl,
@@ -210,7 +210,9 @@ async def test_hub_properties(mock_hub) -> None:
 # Hub Initialization Error Tests
 
 
-async def test_hub_init_pymodbus_version_check_fail(mock_hub, mock_modbus_client) -> None:
+async def test_hub_init_pymodbus_version_check_fail(
+    mock_hub, mock_modbus_client
+) -> None:
     """Test hub initialization fails with old pymodbus version."""
     with patch(
         "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
@@ -218,7 +220,9 @@ async def test_hub_init_pymodbus_version_check_fail(mock_hub, mock_modbus_client
     ):
         with patch.object(mock_hub, "_pymodbus_version", "3.0.0"):
             await mock_hub.connect()
-            with pytest.raises(HubInitFailed, match="pymodbus version must be at least"):
+            with pytest.raises(
+                HubInitFailed, match="pymodbus version must be at least"
+            ):
                 await mock_hub._async_init_solaredge()
 
 
@@ -299,7 +303,9 @@ async def test_hub_init_inverter_timeout_error(mock_hub, mock_modbus_client) -> 
 # Refresh Modbus Data Tests
 
 
-async def test_refresh_modbus_data_connection_failed(mock_hub, mock_modbus_client) -> None:
+async def test_refresh_modbus_data_connection_failed(
+    mock_hub, mock_modbus_client
+) -> None:
     """Test refresh fails when connection cannot be established."""
     mock_hub._initalized = True
     mock_modbus_client.return_value.connected = False
@@ -314,7 +320,9 @@ async def test_refresh_modbus_data_connection_failed(mock_hub, mock_modbus_clien
             await mock_hub.async_refresh_modbus_data()
 
 
-async def test_refresh_modbus_data_timeout_with_retries(mock_hub, mock_modbus_client) -> None:
+async def test_refresh_modbus_data_timeout_with_retries(
+    mock_hub, mock_modbus_client
+) -> None:
     """Test refresh handles timeout with retry logic."""
     from tests.conftest import create_modbus_response
 
@@ -347,7 +355,9 @@ async def test_refresh_modbus_data_timeout_with_retries(mock_hub, mock_modbus_cl
         assert mock_hub._timeout_counter == 0
 
 
-async def test_refresh_modbus_data_modbus_read_error(mock_hub, mock_modbus_client) -> None:
+async def test_refresh_modbus_data_modbus_read_error(
+    mock_hub, mock_modbus_client
+) -> None:
     """Test refresh fails with ModbusReadError."""
     mock_hub._initalized = True
 
@@ -365,7 +375,9 @@ async def test_refresh_modbus_data_modbus_read_error(mock_hub, mock_modbus_clien
             await mock_hub.async_refresh_modbus_data()
 
 
-async def test_refresh_modbus_data_connection_exception(mock_hub, mock_modbus_client) -> None:
+async def test_refresh_modbus_data_connection_exception(
+    mock_hub, mock_modbus_client
+) -> None:
     """Test refresh fails with ConnectionException."""
     mock_hub._initalized = True
 
@@ -406,7 +418,9 @@ async def test_write_registers_success(mock_hub, mock_modbus_client) -> None:
         mock_client.write_registers.assert_called_once()
 
 
-async def test_write_registers_modbus_io_exception(mock_hub, mock_modbus_client) -> None:
+async def test_write_registers_modbus_io_exception(
+    mock_hub, mock_modbus_client
+) -> None:
     """Test write fails with ModbusIOException."""
     mock_client = mock_modbus_client.return_value
     mock_client.write_registers.side_effect = ModbusIOException("IO Error")
@@ -421,7 +435,9 @@ async def test_write_registers_modbus_io_exception(mock_hub, mock_modbus_client)
             await mock_hub.write_registers(unit=1, address=40000, payload=[100])
 
 
-async def test_write_registers_connection_exception(mock_hub, mock_modbus_client) -> None:
+async def test_write_registers_connection_exception(
+    mock_hub, mock_modbus_client
+) -> None:
     """Test write fails with ConnectionException."""
     mock_client = mock_modbus_client.return_value
     mock_client.write_registers.side_effect = ConnectionException("Connection failed")
@@ -436,7 +452,9 @@ async def test_write_registers_connection_exception(mock_hub, mock_modbus_client
             await mock_hub.write_registers(unit=1, address=40000, payload=[100])
 
 
-async def test_write_registers_error_response_io_exception(mock_hub, mock_modbus_client) -> None:
+async def test_write_registers_error_response_io_exception(
+    mock_hub, mock_modbus_client
+) -> None:
     """Test write fails with error response of type ModbusIOException."""
     from tests.conftest import create_io_exception_response
 
@@ -549,7 +567,9 @@ async def test_modbus_read_illegal_address(mock_hub, mock_modbus_client) -> None
         await mock_hub.connect()
 
         with pytest.raises(ModbusIllegalAddress):
-            await mock_hub.modbus_read_holding_registers(unit=1, address=40000, rcount=10)
+            await mock_hub.modbus_read_holding_registers(
+                unit=1, address=40000, rcount=10
+            )
 
 
 async def test_modbus_read_illegal_function(mock_hub, mock_modbus_client) -> None:
@@ -568,7 +588,9 @@ async def test_modbus_read_illegal_function(mock_hub, mock_modbus_client) -> Non
         await mock_hub.connect()
 
         with pytest.raises(ModbusIllegalFunction):
-            await mock_hub.modbus_read_holding_registers(unit=1, address=40000, rcount=10)
+            await mock_hub.modbus_read_holding_registers(
+                unit=1, address=40000, rcount=10
+            )
 
 
 async def test_modbus_read_illegal_value(mock_hub, mock_modbus_client) -> None:
@@ -587,7 +609,9 @@ async def test_modbus_read_illegal_value(mock_hub, mock_modbus_client) -> None:
         await mock_hub.connect()
 
         with pytest.raises(ModbusIllegalValue):
-            await mock_hub.modbus_read_holding_registers(unit=1, address=40000, rcount=10)
+            await mock_hub.modbus_read_holding_registers(
+                unit=1, address=40000, rcount=10
+            )
 
 
 async def test_modbus_read_io_exception(mock_hub, mock_modbus_client) -> None:
@@ -604,16 +628,22 @@ async def test_modbus_read_io_exception(mock_hub, mock_modbus_client) -> None:
         await mock_hub.connect()
 
         with pytest.raises(ModbusIOError):
-            await mock_hub.modbus_read_holding_registers(unit=1, address=40000, rcount=10)
+            await mock_hub.modbus_read_holding_registers(
+                unit=1, address=40000, rcount=10
+            )
 
 
-async def test_modbus_read_register_count_mismatch(mock_hub, mock_modbus_client) -> None:
+async def test_modbus_read_register_count_mismatch(
+    mock_hub, mock_modbus_client
+) -> None:
     """Test modbus read fails when register count doesn't match."""
     from tests.conftest import create_modbus_response
 
     mock_client = mock_modbus_client.return_value
     # Return only 5 registers when 10 were requested
-    mock_client.read_holding_registers.return_value = create_modbus_response([1, 2, 3, 4, 5])
+    mock_client.read_holding_registers.return_value = create_modbus_response(
+        [1, 2, 3, 4, 5]
+    )
 
     with patch(
         "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
@@ -622,15 +652,19 @@ async def test_modbus_read_register_count_mismatch(mock_hub, mock_modbus_client)
         await mock_hub.connect()
 
         with pytest.raises(ModbusReadError, match="Registers received != requested"):
-            await mock_hub.modbus_read_holding_registers(unit=1, address=40000, rcount=10)
+            await mock_hub.modbus_read_holding_registers(
+                unit=1, address=40000, rcount=10
+            )
 
 
 # SolarEdgeInverter Tests
 
 
-async def test_inverter_init_device_success(mock_hub, mock_modbus_client, mock_inverter_registers) -> None:
+async def test_inverter_init_device_success(
+    mock_hub, mock_modbus_client, mock_inverter_registers
+) -> None:
     """Test successful inverter device initialization."""
-    from tests.conftest import create_modbus_response, create_exception_response
+    from tests.conftest import create_exception_response, create_modbus_response
 
     mock_client = mock_modbus_client.return_value
 
@@ -659,7 +693,9 @@ async def test_inverter_init_device_success(mock_hub, mock_modbus_client, mock_i
         assert inverter.serial == "123456789"
 
 
-async def test_inverter_init_device_modbus_io_error(mock_hub, mock_modbus_client) -> None:
+async def test_inverter_init_device_modbus_io_error(
+    mock_hub, mock_modbus_client
+) -> None:
     """Test inverter init fails with ModbusIOError."""
     from tests.conftest import create_io_exception_response
 
@@ -678,7 +714,9 @@ async def test_inverter_init_device_modbus_io_error(mock_hub, mock_modbus_client
             await inverter.init_device()
 
 
-async def test_inverter_init_device_illegal_address(mock_hub, mock_modbus_client) -> None:
+async def test_inverter_init_device_illegal_address(
+    mock_hub, mock_modbus_client
+) -> None:
     """Test inverter init fails with illegal address."""
     from tests.conftest import create_exception_response
 
@@ -731,7 +769,7 @@ async def test_inverter_read_modbus_data_success(
     mock_hub, mock_modbus_client, mock_inverter_registers, mock_inverter_model_registers
 ) -> None:
     """Test successful inverter modbus data read."""
-    from tests.conftest import create_modbus_response, create_exception_response
+    from tests.conftest import create_exception_response, create_modbus_response
 
     mock_client = mock_modbus_client.return_value
 
@@ -772,7 +810,7 @@ async def test_inverter_read_modbus_data_invalid_device(
     mock_hub, mock_modbus_client, mock_inverter_registers
 ) -> None:
     """Test inverter read fails with invalid device."""
-    from tests.conftest import create_modbus_response, create_exception_response
+    from tests.conftest import create_exception_response, create_modbus_response
 
     mock_client = mock_modbus_client.return_value
 
@@ -825,7 +863,9 @@ async def test_inverter_read_modbus_data_with_mmppt(
             return create_modbus_response(mock_inverter_model_registers)
         elif address == 40121 and count == 9:
             # MMPPT common block - return valid MMPPT data
-            return create_modbus_response([160, 5, 0, 0, 0, 0, 0, 0, 2])  # 2 MMPPT units
+            return create_modbus_response(
+                [160, 5, 0, 0, 0, 0, 0, 0, 2]
+            )  # 2 MMPPT units
         elif address == 40123:
             # MMPPT data for 2 units (48 registers)
             return create_modbus_response([0] * 48)
@@ -855,7 +895,9 @@ async def test_inverter_read_modbus_data_with_mmppt(
 # SolarEdgeMeter Tests
 
 
-async def test_meter_init_device_success(mock_hub, mock_modbus_client, mock_inverter_registers) -> None:
+async def test_meter_init_device_success(
+    mock_hub, mock_modbus_client, mock_inverter_registers
+) -> None:
     """Test successful meter device initialization."""
     from tests.conftest import create_modbus_response
 
@@ -869,24 +911,29 @@ async def test_meter_init_device_success(mock_hub, mock_modbus_client, mock_inve
     meter_registers = [1, 65]  # DID=1, Length=65
     # Manufacturer
     manufacturer = "SolarEdge".ljust(32, "\x00")
-    meter_registers.extend([ord(manufacturer[i]) << 8 | ord(manufacturer[i+1])
-                            for i in range(0, 32, 2)])
+    meter_registers.extend(
+        [ord(manufacturer[i]) << 8 | ord(manufacturer[i + 1]) for i in range(0, 32, 2)]
+    )
     # Model
     model = "METER1".ljust(32, "\x00")
-    meter_registers.extend([ord(model[i]) << 8 | ord(model[i+1])
-                           for i in range(0, 32, 2)])
+    meter_registers.extend(
+        [ord(model[i]) << 8 | ord(model[i + 1]) for i in range(0, 32, 2)]
+    )
     # Option
     option = "".ljust(16, "\x00")
-    meter_registers.extend([ord(option[i]) << 8 | ord(option[i+1])
-                           for i in range(0, 16, 2)])
+    meter_registers.extend(
+        [ord(option[i]) << 8 | ord(option[i + 1]) for i in range(0, 16, 2)]
+    )
     # Version
     version = "1.0".ljust(16, "\x00")
-    meter_registers.extend([ord(version[i]) << 8 | ord(version[i+1])
-                           for i in range(0, 16, 2)])
+    meter_registers.extend(
+        [ord(version[i]) << 8 | ord(version[i + 1]) for i in range(0, 16, 2)]
+    )
     # Serial
     serial = "M123456".ljust(32, "\x00")
-    meter_registers.extend([ord(serial[i]) << 8 | ord(serial[i+1])
-                           for i in range(0, 32, 2)])
+    meter_registers.extend(
+        [ord(serial[i]) << 8 | ord(serial[i + 1]) for i in range(0, 32, 2)]
+    )
     # Device address
     meter_registers.append(1)
 
@@ -1038,20 +1085,24 @@ async def test_battery_init_device_success(mock_hub, mock_modbus_client) -> None
 
     # Manufacturer
     manufacturer = "LG".ljust(32, "\x00")
-    battery_registers.extend([ord(manufacturer[i]) << 8 | ord(manufacturer[i+1])
-                             for i in range(0, 32, 2)])
+    battery_registers.extend(
+        [ord(manufacturer[i]) << 8 | ord(manufacturer[i + 1]) for i in range(0, 32, 2)]
+    )
     # Model
     model = "RESU10".ljust(32, "\x00")
-    battery_registers.extend([ord(model[i]) << 8 | ord(model[i+1])
-                             for i in range(0, 32, 2)])
+    battery_registers.extend(
+        [ord(model[i]) << 8 | ord(model[i + 1]) for i in range(0, 32, 2)]
+    )
     # Version
     version = "1.0".ljust(32, "\x00")
-    battery_registers.extend([ord(version[i]) << 8 | ord(version[i+1])
-                             for i in range(0, 32, 2)])
+    battery_registers.extend(
+        [ord(version[i]) << 8 | ord(version[i + 1]) for i in range(0, 32, 2)]
+    )
     # Serial
     serial = "BAT123".ljust(32, "\x00")
-    battery_registers.extend([ord(serial[i]) << 8 | ord(serial[i+1])
-                             for i in range(0, 32, 2)])
+    battery_registers.extend(
+        [ord(serial[i]) << 8 | ord(serial[i + 1]) for i in range(0, 32, 2)]
+    )
     # Device address
     battery_registers.append(1)
     battery_registers.append(0)  # padding

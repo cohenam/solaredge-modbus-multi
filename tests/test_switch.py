@@ -240,9 +240,7 @@ class TestSolarEdgeExternalProduction:
     ):
         """Test unavailability when E_Lim_Ctl_Mode is not implemented."""
         mock_inverter_platform.online = True
-        mock_inverter_platform.decoded_model = {
-            "E_Lim_Ctl_Mode": SunSpecNotImpl.UINT16
-        }
+        mock_inverter_platform.decoded_model = {"E_Lim_Ctl_Mode": SunSpecNotImpl.UINT16}
         mock_coordinator.last_update_success = True
 
         switch = SolarEdgeExternalProduction(
@@ -434,11 +432,15 @@ class TestSolarEdgeExternalProduction:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(switch, "async_update", new_callable=AsyncMock) as mock_update:
+        with patch.object(
+            switch, "async_update", new_callable=AsyncMock
+        ) as mock_update:
             await switch.async_turn_on()
             mock_update.assert_called_once()
 
-        with patch.object(switch, "async_update", new_callable=AsyncMock) as mock_update:
+        with patch.object(
+            switch, "async_update", new_callable=AsyncMock
+        ) as mock_update:
             await switch.async_turn_off()
             mock_update.assert_called_once()
 
@@ -505,9 +507,7 @@ class TestSolarEdgeNegativeSiteLimit:
     ):
         """Test unavailability when E_Lim_Ctl_Mode is not implemented."""
         mock_inverter_platform.online = True
-        mock_inverter_platform.decoded_model = {
-            "E_Lim_Ctl_Mode": SunSpecNotImpl.UINT16
-        }
+        mock_inverter_platform.decoded_model = {"E_Lim_Ctl_Mode": SunSpecNotImpl.UINT16}
         mock_coordinator.last_update_success = True
 
         switch = SolarEdgeNegativeSiteLimit(
@@ -698,11 +698,15 @@ class TestSolarEdgeNegativeSiteLimit:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(switch, "async_update", new_callable=AsyncMock) as mock_update:
+        with patch.object(
+            switch, "async_update", new_callable=AsyncMock
+        ) as mock_update:
             await switch.async_turn_on()
             mock_update.assert_called_once()
 
-        with patch.object(switch, "async_update", new_callable=AsyncMock) as mock_update:
+        with patch.object(
+            switch, "async_update", new_callable=AsyncMock
+        ) as mock_update:
             await switch.async_turn_off()
             mock_update.assert_called_once()
 
@@ -896,11 +900,15 @@ class TestSolarEdgeGridControl:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(switch, "async_update", new_callable=AsyncMock) as mock_update:
+        with patch.object(
+            switch, "async_update", new_callable=AsyncMock
+        ) as mock_update:
             await switch.async_turn_on()
             mock_update.assert_called_once()
 
-        with patch.object(switch, "async_update", new_callable=AsyncMock) as mock_update:
+        with patch.object(
+            switch, "async_update", new_callable=AsyncMock
+        ) as mock_update:
             await switch.async_turn_off()
             mock_update.assert_called_once()
 

@@ -122,7 +122,9 @@ def mock_inverter_platform_no_battery():
 class TestStorageACChargeLimit:
     """Tests for StorageACChargeLimit number entity."""
 
-    def test_unique_id(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_unique_id(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test unique_id property."""
         entity = StorageACChargeLimit(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -283,7 +285,9 @@ class TestStorageACChargeLimit:
 class TestStorageBackupReserve:
     """Tests for StorageBackupReserve number entity."""
 
-    def test_unique_id(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_unique_id(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test unique_id property."""
         entity = StorageBackupReserve(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -384,7 +388,9 @@ class TestStorageBackupReserve:
 class TestStorageCommandTimeout:
     """Tests for StorageCommandTimeout number entity."""
 
-    def test_unique_id(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_unique_id(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test unique_id property."""
         entity = StorageCommandTimeout(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -486,7 +492,9 @@ class TestStorageCommandTimeout:
 class TestStorageChargeLimit:
     """Tests for StorageChargeLimit number entity."""
 
-    def test_unique_id(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_unique_id(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test unique_id property."""
         entity = StorageChargeLimit(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -588,7 +596,9 @@ class TestStorageChargeLimit:
 class TestStorageDischargeLimit:
     """Tests for StorageDischargeLimit number entity."""
 
-    def test_unique_id(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_unique_id(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test unique_id property."""
         entity = StorageDischargeLimit(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -690,7 +700,9 @@ class TestStorageDischargeLimit:
 class TestSolarEdgeSiteLimit:
     """Tests for SolarEdgeSiteLimit number entity."""
 
-    def test_unique_id(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_unique_id(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test unique_id property."""
         entity = SolarEdgeSiteLimit(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -812,7 +824,9 @@ class TestSolarEdgeSiteLimit:
 class TestSolarEdgeExternalProductionMax:
     """Tests for SolarEdgeExternalProductionMax number entity."""
 
-    def test_unique_id(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_unique_id(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test unique_id property."""
         entity = SolarEdgeExternalProductionMax(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -923,7 +937,9 @@ class TestSolarEdgeExternalProductionMax:
 class TestSolarEdgeActivePowerLimitSet:
     """Tests for SolarEdgeActivePowerLimitSet number entity."""
 
-    def test_unique_id(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_unique_id(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test unique_id property."""
         entity = SolarEdgeActivePowerLimitSet(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -1036,7 +1052,9 @@ class TestSolarEdgeActivePowerLimitSet:
 class TestSolarEdgeCosPhiSet:
     """Tests for SolarEdgeCosPhiSet number entity."""
 
-    def test_unique_id(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_unique_id(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test unique_id property."""
         entity = SolarEdgeCosPhiSet(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -1146,7 +1164,9 @@ class TestSolarEdgeCosPhiSet:
 class TestSolarEdgePowerReduce:
     """Tests for SolarEdgePowerReduce number entity."""
 
-    def test_unique_id(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_unique_id(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test unique_id property."""
         entity = SolarEdgePowerReduce(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -1256,7 +1276,9 @@ class TestSolarEdgePowerReduce:
 class TestSolarEdgeCurrentLimit:
     """Tests for SolarEdgeCurrentLimit number entity."""
 
-    def test_unique_id(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_unique_id(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test unique_id property."""
         entity = SolarEdgeCurrentLimit(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -1389,7 +1411,9 @@ class TestAsyncSetupEntry:
 
         coordinator = MagicMock()
 
-        hass.data = {DOMAIN: {config_entry.entry_id: {"hub": hub, "coordinator": coordinator}}}
+        hass.data = {
+            DOMAIN: {config_entry.entry_id: {"hub": hub, "coordinator": coordinator}}
+        }
 
         await async_setup_entry(hass, config_entry, async_add_entities)
 
@@ -1421,7 +1445,9 @@ class TestAsyncSetupEntry:
 
         coordinator = MagicMock()
 
-        hass.data = {DOMAIN: {config_entry.entry_id: {"hub": hub, "coordinator": coordinator}}}
+        hass.data = {
+            DOMAIN: {config_entry.entry_id: {"hub": hub, "coordinator": coordinator}}
+        }
 
         await async_setup_entry(hass, config_entry, async_add_entities)
 
@@ -1448,7 +1474,9 @@ class TestAsyncSetupEntry:
 
         coordinator = MagicMock()
 
-        hass.data = {DOMAIN: {config_entry.entry_id: {"hub": hub, "coordinator": coordinator}}}
+        hass.data = {
+            DOMAIN: {config_entry.entry_id: {"hub": hub, "coordinator": coordinator}}
+        }
 
         await async_setup_entry(hass, config_entry, async_add_entities)
 
@@ -1462,21 +1490,27 @@ class TestAsyncSetupEntry:
 class TestSolarEdgeNumberBase:
     """Tests for SolarEdgeNumberBase class."""
 
-    def test_device_info(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_device_info(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test device_info property."""
         entity = SolarEdgeActivePowerLimitSet(
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
         assert entity.device_info == mock_inverter_platform.device_info
 
-    def test_config_entry_id(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_config_entry_id(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test config_entry_id property."""
         entity = SolarEdgeActivePowerLimitSet(
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
         assert entity.config_entry_id == "test_entry_123"
 
-    def test_config_entry_name(self, mock_inverter_platform, mock_config_entry, mock_coordinator):
+    def test_config_entry_name(
+        self, mock_inverter_platform, mock_config_entry, mock_coordinator
+    ):
         """Test config_entry_name property."""
         entity = SolarEdgeActivePowerLimitSet(
             mock_inverter_platform, mock_config_entry, mock_coordinator
