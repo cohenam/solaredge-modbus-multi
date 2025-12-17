@@ -584,11 +584,6 @@ class SolarEdgeModbusMultiHub:
         """Write modbus registers to inverter."""
 
         try:
-            async with self._modbus_lock:
-                if not self.is_connected:
-                    # Release lock for connect (which also acquires lock)
-                    pass
-
             if not self.is_connected:
                 await self.connect()
 
