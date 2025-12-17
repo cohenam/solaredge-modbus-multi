@@ -1587,7 +1587,7 @@ class SolarEdgeInverter:
             except ModbusIllegalAddress:
                 self.advanced_power_control = False
                 _LOGGER.debug(
-                    (f"I{self.inverter_unit_id}: advanced power control NOT available")
+                    f"I{self.inverter_unit_id}: advanced power control NOT available"
                 )
 
             except (TimeoutError, ModbusIOException):
@@ -1662,7 +1662,7 @@ class SolarEdgeInverter:
             except ModbusIllegalAddress:
                 self.site_limit_control = False
                 _LOGGER.debug(
-                    (f"I{self.inverter_unit_id}: site limit control NOT available")
+                    f"I{self.inverter_unit_id}: site limit control NOT available"
                 )
 
             except ModbusIOError:
@@ -1697,7 +1697,7 @@ class SolarEdgeInverter:
                 except KeyError:
                     pass
 
-                _LOGGER.debug((f"I{self.inverter_unit_id}: Ext_Prod_Max NOT available"))
+                _LOGGER.debug(f"I{self.inverter_unit_id}: Ext_Prod_Max NOT available")
 
             except ModbusIOError:
                 raise ModbusReadError(
@@ -1729,7 +1729,7 @@ class SolarEdgeInverter:
 
             except ModbusIllegalAddress:
                 self._grid_status = False
-                _LOGGER.debug((f"I{self.inverter_unit_id}: Grid On/Off NOT available"))
+                _LOGGER.debug(f"I{self.inverter_unit_id}: Grid On/Off NOT available")
 
             except ModbusIOException as e:
                 _LOGGER.debug(
@@ -1846,7 +1846,7 @@ class SolarEdgeInverter:
             except ModbusIllegalAddress:
                 self.decoded_storage_control = False
                 _LOGGER.debug(
-                    (f"I{self.inverter_unit_id}: storage control NOT available")
+                    f"I{self.inverter_unit_id}: storage control NOT available"
                 )
 
             except ModbusIOError:
