@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "solaredge-modbus-multi"
+version = "3.3.0"
+description = "Home Assistant integration for SolarEdge inverters using Modbus/TCP"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.12"
+dependencies = [
+    "pymodbus>=3.8.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=3.5.0",
+    "ruff>=0.8.0",
+]
+test = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-homeassistant-custom-component>=0.13.190",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["custom_components*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B904",  # raise from - requires significant code changes
+    "B905",  # zip strict - requires significant code changes
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components.solaredge_modbus_multi"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
