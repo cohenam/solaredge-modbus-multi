@@ -477,47 +477,54 @@ class SolarEdgeModbusMultiHub:
 
         return True
 
+    async def _connect_unlocked(self) -> None:
+        """Connect to inverter (internal, caller must hold _modbus_lock)."""
+        if self._client is None:
+            _LOGGER.debug(
+                "New AsyncModbusTcpClient: "
+                f"reconnect_delay={self._mb_reconnect_delay} "
+                f"reconnect_delay_max={self._mb_reconnect_delay_max} "
+                f"timeout={self._mb_timeout} "
+                f"retries={self._mb_retries}"
+            )
+            self._client = AsyncModbusTcpClient(
+                host=self._host,
+                port=self._port,
+                reconnect_delay=self._mb_reconnect_delay,
+                reconnect_delay_max=self._mb_reconnect_delay_max,
+                timeout=self._mb_timeout,
+                retries=self._mb_retries,
+            )
+            # Cache signature check once
+            sig = inspect.signature(self._client.read_holding_registers)
+            self._use_device_id_param = "device_id" in sig.parameters
+
+        _LOGGER.debug((f"Connecting to {self._host}:{self._port} ..."))
+        await self._client.connect()
+
     async def connect(self) -> None:
         """Connect to inverter."""
-
         async with self._modbus_lock:
-            if self._client is None:
-                _LOGGER.debug(
-                    "New AsyncModbusTcpClient: "
-                    f"reconnect_delay={self._mb_reconnect_delay} "
-                    f"reconnect_delay_max={self._mb_reconnect_delay_max} "
-                    f"timeout={self._mb_timeout} "
-                    f"retries={self._mb_retries}"
-                )
-                self._client = AsyncModbusTcpClient(
-                    host=self._host,
-                    port=self._port,
-                    reconnect_delay=self._mb_reconnect_delay,
-                    reconnect_delay_max=self._mb_reconnect_delay_max,
-                    timeout=self._mb_timeout,
-                    retries=self._mb_retries,
-                )
-                # Cache signature check once
-                sig = inspect.signature(self._client.read_holding_registers)
-                self._use_device_id_param = "device_id" in sig.parameters
+            await self._connect_unlocked()
 
-            _LOGGER.debug((f"Connecting to {self._host}:{self._port} ..."))
-            await self._client.connect()
+    def _disconnect_unlocked(self, clear_client: bool = False) -> None:
+        """Disconnect from inverter (internal, caller must hold _modbus_lock)."""
+        if self._client is not None:
+            _LOGGER.debug(
+                (
+                    f"Disconnecting from {self._host}:{self._port} "
+                    f"(clear_client={clear_client})."
+                )
+            )
+            self._client.close()
+
+            if clear_client:
+                self._client = None
 
     async def disconnect(self, clear_client: bool = False) -> None:
         """Disconnect from inverter."""
         async with self._modbus_lock:
-            if self._client is not None:
-                _LOGGER.debug(
-                    (
-                        f"Disconnecting from {self._host}:{self._port} "
-                        f"(clear_client={clear_client})."
-                    )
-                )
-                self._client.close()
-
-                if clear_client:
-                    self._client = None
+            self._disconnect_unlocked(clear_client)
 
     async def shutdown(self) -> None:
         """Shut down the hub and disconnect."""
@@ -586,7 +593,7 @@ class SolarEdgeModbusMultiHub:
         try:
             async with self._modbus_lock:
                 if not self.is_connected:
-                    await self.connect()
+                    await self._connect_unlocked()
 
                 if self._use_device_id_param:
                     result = await self._client.write_registers(
