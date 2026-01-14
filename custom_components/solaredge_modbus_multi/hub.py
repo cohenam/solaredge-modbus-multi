@@ -584,10 +584,10 @@ class SolarEdgeModbusMultiHub:
         """Write modbus registers to inverter."""
 
         try:
-            if not self.is_connected:
-                await self.connect()
-
             async with self._modbus_lock:
+                if not self.is_connected:
+                    await self.connect()
+
                 if self._use_device_id_param:
                     result = await self._client.write_registers(
                         address=address,

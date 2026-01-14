@@ -139,7 +139,6 @@ async def async_setup_entry(
         entities.append(ACPower(meter, config_entry, coordinator, "A"))
         entities.append(ACPower(meter, config_entry, coordinator, "B"))
         entities.append(ACPower(meter, config_entry, coordinator, "C"))
-        entities.append(ACPowerInverted(meter, config_entry, coordinator))
         entities.append(ACVoltAmp(meter, config_entry, coordinator))
         entities.append(ACVoltAmp(meter, config_entry, coordinator, "A"))
         entities.append(ACVoltAmp(meter, config_entry, coordinator, "B"))

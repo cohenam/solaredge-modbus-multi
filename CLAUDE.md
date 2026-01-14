@@ -20,10 +20,10 @@ git merge upstream/main
 ## Development Commands
 
 ### Linting
-The project uses GitHub Super Linter on push/PR. Local linting follows these configs:
-- **flake8**: max-line-length=80 (see `setup.cfg`)
-- **isort**: profile=black
-- **black**: Standard Python formatter (implied by isort profile)
+The project uses Ruff for linting and formatting:
+- **ruff**: line-length=88 (see `pyproject.toml`)
+- Ruff handles linting (E, W, F, I, B rules) and formatting
+- Run `ruff check custom_components/` and `ruff format custom_components/`
 
 ### Dependencies
 - Python 3.12+
