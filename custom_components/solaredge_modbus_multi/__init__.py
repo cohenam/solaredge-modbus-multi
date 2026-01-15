@@ -10,6 +10,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -82,7 +83,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
     }
 
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except HubInitFailed as err:
+        _LOGGER.debug("Initial connection failed: %s", err)
+        raise ConfigEntryNotReady(
+            f"Unable to connect to SolarEdge inverter at "
+            f"{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}: {err}"
+        ) from err
+    except DataUpdateFailed as err:
+        _LOGGER.debug("Initial data refresh failed: %s", err)
+        raise ConfigEntryNotReady(
+            f"Unable to read data from SolarEdge inverter: {err}"
+        ) from err
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -114,7 +127,7 @@ async def async_remove_config_entry_device(
     """Remove a config entry from a device."""
     solaredge_hub = hass.data[DOMAIN][config_entry.entry_id]["hub"]
 
-    known_devices = []
+    known_devices = set()
 
     for inverter in solaredge_hub.inverters:
         inverter_device_ids = {
@@ -123,7 +136,7 @@ async def async_remove_config_entry_device(
             if dev_id[0] == DOMAIN
         }
         for dev_id in inverter_device_ids:
-            known_devices.append(dev_id)
+            known_devices.add(dev_id)
 
     for meter in solaredge_hub.meters:
         meter_device_ids = {
@@ -132,7 +145,7 @@ async def async_remove_config_entry_device(
             if dev_id[0] == DOMAIN
         }
         for dev_id in meter_device_ids:
-            known_devices.append(dev_id)
+            known_devices.add(dev_id)
 
     for battery in solaredge_hub.batteries:
         battery_device_ids = {
@@ -141,7 +154,7 @@ async def async_remove_config_entry_device(
             if dev_id[0] == DOMAIN
         }
         for dev_id in battery_device_ids:
-            known_devices.append(dev_id)
+            known_devices.add(dev_id)
 
     this_device_ids = {
         dev_id[1] for dev_id in device_entry.identifiers if dev_id[0] == DOMAIN
@@ -239,15 +252,16 @@ class SolarEdgeCoordinator(DataUpdateCoordinator):
             _LOGGER,
             name="SolarEdge Coordinator",
             update_interval=timedelta(seconds=scan_interval),
+            always_update=False,
         )
         self._hub = hub
         self._yaml_config = hass.data[DOMAIN]["yaml"]
 
     async def _async_update_data(self) -> bool:
         try:
+            # Wait for any pending writes (with short sleep for responsiveness)
             while self._hub.has_write:
-                _LOGGER.debug(f"Waiting for write {self._hub.has_write}")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.1)  # Reduced from 1s to 100ms
 
             return await self._refresh_modbus_data_with_retry(
                 ex_type=DataUpdateFailed,
