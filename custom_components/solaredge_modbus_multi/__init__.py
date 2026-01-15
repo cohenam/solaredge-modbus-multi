@@ -252,7 +252,10 @@ class SolarEdgeCoordinator(DataUpdateCoordinator):
             _LOGGER,
             name="SolarEdge Coordinator",
             update_interval=timedelta(seconds=scan_interval),
-            always_update=False,
+            # Note: always_update defaults to True, which is required because
+            # _async_update_data returns a boolean, not the actual sensor data.
+            # Entities access data via self.hub directly, so they need coordinator
+            # callbacks to trigger state updates even when return value is unchanged.
         )
         self._hub = hub
         self._yaml_config = hass.data[DOMAIN]["yaml"]
