@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 
+from awesomeversion import AwesomeVersion
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -25,7 +26,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from awesomeversion import AwesomeVersion
 
 from .const import (
     BATTERY_STATUS,
