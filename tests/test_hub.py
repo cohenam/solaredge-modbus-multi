@@ -770,9 +770,10 @@ async def test_inverter_read_modbus_data_success(
         if address == 40000:
             return create_modbus_response(mock_inverter_registers)
         elif address == 40044:
-            return create_modbus_response([0] * 8)  # Version string
-        elif address == 40069:
-            return create_modbus_response(mock_inverter_model_registers)
+            # Merged read: 8 (version) + 17 (gap) + 40 (model) = 65
+            return create_modbus_response(
+                [0] * 8 + [0] * 17 + mock_inverter_model_registers
+            )
         elif address == 40113:
             # Grid status
             return create_modbus_response([0] * 2)
@@ -810,11 +811,9 @@ async def test_inverter_read_modbus_data_invalid_device(
         if address == 40000:
             return create_modbus_response(mock_inverter_registers)
         elif address == 40044:
-            return create_modbus_response([0] * 8)
-        elif address == 40069:
-            # Return invalid DID
+            # Merged read: 8 (version) + 17 (gap) + invalid DID model
             invalid_model = [999, 50] + [0] * 38
-            return create_modbus_response(invalid_model)
+            return create_modbus_response([0] * 8 + [0] * 17 + invalid_model)
         elif address == 40121:
             return create_exception_response(ModbusExceptions.IllegalAddress)
         return create_modbus_response([0] * 10)
@@ -849,9 +848,10 @@ async def test_inverter_read_modbus_data_with_mmppt(
         if address == 40000:
             return create_modbus_response(mock_inverter_registers)
         elif address == 40044:
-            return create_modbus_response([0] * 8)
-        elif address == 40069:
-            return create_modbus_response(mock_inverter_model_registers)
+            # Merged read: 8 (version) + 17 (gap) + 40 (model) = 65
+            return create_modbus_response(
+                [0] * 8 + [0] * 17 + mock_inverter_model_registers
+            )
         elif address == 40121 and count == 9:
             # MMPPT common block - return valid MMPPT data
             return create_modbus_response(

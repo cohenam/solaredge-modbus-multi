@@ -89,8 +89,11 @@ async def test_async_setup_entry_success(
     def mock_read(address, count, **kwargs):
         if address == 40000:
             return create_modbus_response(mock_inverter_registers)
-        elif address == 40069:
-            return create_modbus_response(mock_inverter_model_registers)
+        elif address == 40044:
+            # Merged read: 8 (version) + 17 (gap) + 40 (model) = 65
+            return create_modbus_response(
+                [0] * 8 + [0] * 17 + mock_inverter_model_registers
+            )
         elif address == 40121:
             # MMPPT common - return not implemented
             return create_modbus_response([0xFFFF] * count)
@@ -150,8 +153,11 @@ async def test_async_unload_entry(
     def mock_read(address, count, **kwargs):
         if address == 40000:
             return create_modbus_response(mock_inverter_registers)
-        elif address == 40069:
-            return create_modbus_response(mock_inverter_model_registers)
+        elif address == 40044:
+            # Merged read: 8 (version) + 17 (gap) + 40 (model) = 65
+            return create_modbus_response(
+                [0] * 8 + [0] * 17 + mock_inverter_model_registers
+            )
         else:
             return create_modbus_response([0] * count)
 
@@ -390,8 +396,11 @@ async def test_async_remove_config_entry_device_in_use(
     def mock_read(address, count, **kwargs):
         if address == 40000:
             return create_modbus_response(mock_inverter_registers)
-        elif address == 40069:
-            return create_modbus_response(mock_inverter_model_registers)
+        elif address == 40044:
+            # Merged read: 8 (version) + 17 (gap) + 40 (model) = 65
+            return create_modbus_response(
+                [0] * 8 + [0] * 17 + mock_inverter_model_registers
+            )
         else:
             return create_modbus_response([0] * count)
 
@@ -449,8 +458,11 @@ async def test_async_remove_config_entry_device_not_in_use(
     def mock_read(address, count, **kwargs):
         if address == 40000:
             return create_modbus_response(mock_inverter_registers)
-        elif address == 40069:
-            return create_modbus_response(mock_inverter_model_registers)
+        elif address == 40044:
+            # Merged read: 8 (version) + 17 (gap) + 40 (model) = 65
+            return create_modbus_response(
+                [0] * 8 + [0] * 17 + mock_inverter_model_registers
+            )
         else:
             return create_modbus_response([0] * count)
 
@@ -500,8 +512,11 @@ async def test_coordinator_update_with_pending_writes(
     def mock_read(address, count, **kwargs):
         if address == 40000:
             return create_modbus_response(mock_inverter_registers)
-        elif address == 40069:
-            return create_modbus_response(mock_inverter_model_registers)
+        elif address == 40044:
+            # Merged read: 8 (version) + 17 (gap) + 40 (model) = 65
+            return create_modbus_response(
+                [0] * 8 + [0] * 17 + mock_inverter_model_registers
+            )
         else:
             return create_modbus_response([0] * count)
 
@@ -578,8 +593,11 @@ async def test_coordinator_retry_logic_success_on_retry(
         # Succeed on subsequent calls
         if address == 40000:
             return create_modbus_response(mock_inverter_registers)
-        elif address == 40069:
-            return create_modbus_response(mock_inverter_model_registers)
+        elif address == 40044:
+            # Merged read: 8 (version) + 17 (gap) + 40 (model) = 65
+            return create_modbus_response(
+                [0] * 8 + [0] * 17 + mock_inverter_model_registers
+            )
         else:
             return create_modbus_response([0] * count)
 
@@ -651,8 +669,11 @@ async def test_coordinator_update_raises_update_failed_on_hub_init_failed(
     def mock_read(address, count, **kwargs):
         if address == 40000:
             return create_modbus_response(mock_inverter_registers)
-        elif address == 40069:
-            return create_modbus_response(mock_inverter_model_registers)
+        elif address == 40044:
+            # Merged read: 8 (version) + 17 (gap) + 40 (model) = 65
+            return create_modbus_response(
+                [0] * 8 + [0] * 17 + mock_inverter_model_registers
+            )
         else:
             return create_modbus_response([0] * count)
 
@@ -701,8 +722,11 @@ async def test_coordinator_update_raises_update_failed_on_data_update_failed(
     def mock_read(address, count, **kwargs):
         if address == 40000:
             return create_modbus_response(mock_inverter_registers)
-        elif address == 40069:
-            return create_modbus_response(mock_inverter_model_registers)
+        elif address == 40044:
+            # Merged read: 8 (version) + 17 (gap) + 40 (model) = 65
+            return create_modbus_response(
+                [0] * 8 + [0] * 17 + mock_inverter_model_registers
+            )
         else:
             return create_modbus_response([0] * count)
 
