@@ -354,25 +354,15 @@ class SolarEdgeModbusMultiHub:
             for bat in self.batteries:
                 await self._poll_device_with_lock(bat)
 
-        except ModbusReadError as e:
+        except (
+            ModbusReadError,
+            DeviceInvalid,
+            ConnectionException,
+            ModbusIOException,
+            TimeoutError,
+        ) as e:
             await self.disconnect()
-            raise HubInitFailed(f"Read error: {e}")
-
-        except DeviceInvalid as e:
-            await self.disconnect()
-            raise HubInitFailed(f"Invalid device: {e}")
-
-        except ConnectionException as e:
-            await self.disconnect()
-            raise HubInitFailed(f"Connection failed: {e}")
-
-        except ModbusIOException as e:
-            await self.disconnect()
-            raise HubInitFailed(f"Modbus error: {e}")
-
-        except TimeoutError as e:
-            await self.disconnect()
-            raise HubInitFailed(f"Timeout error: {e}")
+            raise HubInitFailed(f"{type(e).__name__}: {e}")
 
         self.initalized = True
 
@@ -437,21 +427,14 @@ class SolarEdgeModbusMultiHub:
                 for bat in self.batteries:
                     await self._poll_device_with_lock(bat)
 
-        except ModbusReadError as e:
+        except (
+            ModbusReadError,
+            DeviceInvalid,
+            ConnectionException,
+            ModbusIOException,
+        ) as e:
             await self.disconnect()
-            raise DataUpdateFailed(f"Update failed: {e}")
-
-        except DeviceInvalid as e:
-            await self.disconnect()
-            raise DataUpdateFailed(f"Invalid device: {e}")
-
-        except ConnectionException as e:
-            await self.disconnect()
-            raise DataUpdateFailed(f"Connection failed: {e}")
-
-        except ModbusIOException as e:
-            await self.disconnect()
-            raise DataUpdateFailed(f"Modbus error: {e}")
+            raise DataUpdateFailed(f"{type(e).__name__}: {e}")
 
         except TimeoutError as e:
             await self.disconnect(clear_client=True)
@@ -543,8 +526,7 @@ class SolarEdgeModbusMultiHub:
         """Read modbus registers (internal, caller must hold _modbus_lock)."""
 
         _LOGGER.debug(
-            f"I{unit}: modbus_read_holding_registers "
-            f"address={address} count={rcount}"
+            f"I{unit}: modbus_read_holding_registers address={address} count={rcount}"
         )
 
         if self._use_device_id_param:
@@ -707,10 +689,7 @@ class SolarEdgeModbusMultiHub:
 
     @online.setter
     def online(self, value: bool) -> None:
-        if value is True:
-            self._online = True
-        else:
-            self._online = False
+        self._online = bool(value)
 
     @property
     def initalized(self):
@@ -718,10 +697,7 @@ class SolarEdgeModbusMultiHub:
 
     @initalized.setter
     def initalized(self, value: bool) -> None:
-        if value is True:
-            self._initalized = True
-        else:
-            self._initalized = False
+        self._initalized = bool(value)
 
     @property
     def name(self):
@@ -761,10 +737,7 @@ class SolarEdgeModbusMultiHub:
 
     @keep_modbus_open.setter
     def keep_modbus_open(self, value: bool) -> None:
-        if value is True:
-            self._keep_modbus_open = True
-        else:
-            self._keep_modbus_open = False
+        self._keep_modbus_open = bool(value)
 
         _LOGGER.debug(f"keep_modbus_open={self._keep_modbus_open}")
 
