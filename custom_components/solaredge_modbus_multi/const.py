@@ -79,12 +79,16 @@ class ModbusDefaults(IntEnum):
 
 
 class SolarEdgeTimeouts(IntEnum):
-    """Timeouts in milliseconds."""
+    """Timeouts in milliseconds.
 
-    Inverter = 8400
-    Device = 1200
-    Init = 1200
-    Read = 6000
+    Tuned for sequential polling with batch lock on LAN.
+    Typical single Modbus read: 50-100ms.
+    """
+
+    Inverter = 3000  # Base timeout for first inverter (was 8400)
+    Device = 500  # Per additional device (was 1200)
+    Init = 800  # Per device during init/discovery (was 1200)
+    Read = 2000  # Per extra read block (was 6000)
 
 
 class BatteryLimit(IntEnum):

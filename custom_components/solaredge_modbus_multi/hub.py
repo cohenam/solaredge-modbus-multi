@@ -188,6 +188,7 @@ class SolarEdgeModbusMultiHub:
 
         self._client = None
         self._modbus_lock = asyncio.Lock()
+        self._lock_holder = None  # Track current task holding the lock
         self._use_device_id_param = None  # Cached signature check
 
         self._pymodbus_version = pymodbus_version
@@ -345,10 +346,13 @@ class SolarEdgeModbusMultiHub:
                         pass
 
         try:
-            # Read all devices in parallel
-            await asyncio.gather(*[inv.read_modbus_data() for inv in self.inverters])
-            await asyncio.gather(*[meter.read_modbus_data() for meter in self.meters])
-            await asyncio.gather(*[bat.read_modbus_data() for bat in self.batteries])
+            # Read all devices sequentially with batch lock per device
+            for inv in self.inverters:
+                await self._poll_device_with_lock(inv)
+            for meter in self.meters:
+                await self._poll_device_with_lock(meter)
+            for bat in self.batteries:
+                await self._poll_device_with_lock(bat)
 
         except ModbusReadError as e:
             await self.disconnect()
@@ -425,16 +429,13 @@ class SolarEdgeModbusMultiHub:
 
         try:
             async with asyncio.timeout(self.coordinator_timeout):
-                # Read all devices in parallel
-                await asyncio.gather(
-                    *[inv.read_modbus_data() for inv in self.inverters]
-                )
-                await asyncio.gather(
-                    *[meter.read_modbus_data() for meter in self.meters]
-                )
-                await asyncio.gather(
-                    *[bat.read_modbus_data() for bat in self.batteries]
-                )
+                # Read all devices sequentially with batch lock per device
+                for inv in self.inverters:
+                    await self._poll_device_with_lock(inv)
+                for meter in self.meters:
+                    await self._poll_device_with_lock(meter)
+                for bat in self.batteries:
+                    await self._poll_device_with_lock(bat)
 
         except ModbusReadError as e:
             await self.disconnect()
@@ -504,6 +505,9 @@ class SolarEdgeModbusMultiHub:
 
     async def connect(self) -> None:
         """Connect to inverter."""
+        if self._lock_holder is asyncio.current_task():
+            await self._connect_unlocked()
+            return
         async with self._modbus_lock:
             await self._connect_unlocked()
 
@@ -523,6 +527,9 @@ class SolarEdgeModbusMultiHub:
 
     async def disconnect(self, clear_client: bool = False) -> None:
         """Disconnect from inverter."""
+        if self._lock_holder is asyncio.current_task():
+            self._disconnect_unlocked(clear_client)
+            return
         async with self._modbus_lock:
             self._disconnect_unlocked(clear_client)
 
@@ -532,60 +539,87 @@ class SolarEdgeModbusMultiHub:
         self.online = False
         await self.disconnect(clear_client=True)
 
+    async def _read_registers_unlocked(self, unit, address, rcount):
+        """Read modbus registers (internal, caller must hold _modbus_lock)."""
+
+        _LOGGER.debug(
+            f"I{unit}: modbus_read_holding_registers "
+            f"address={address} count={rcount}"
+        )
+
+        if self._use_device_id_param:
+            result = await self._client.read_holding_registers(
+                address=address, count=rcount, device_id=unit
+            )
+        else:
+            result = await self._client.read_holding_registers(
+                address=address, count=rcount, slave=unit
+            )
+
+        _LOGGER.debug(f"I{unit}: result is error: {result.isError()} ")
+
+        if result.isError():
+            _LOGGER.debug(f"I{unit}: error result: {type(result)} ")
+
+            if type(result) is ModbusIOException:
+                raise ModbusIOError(result)
+
+            if type(result) is ExceptionResponse:
+                if result.exception_code == ModbusExceptions.IllegalAddress:
+                    _LOGGER.debug(f"I{unit} Read IllegalAddress: {result}")
+                    raise ModbusIllegalAddress(result)
+
+                if result.exception_code == ModbusExceptions.IllegalFunction:
+                    _LOGGER.debug(f"I{unit} Read IllegalFunction: {result}")
+                    raise ModbusIllegalFunction(result)
+
+                if result.exception_code == ModbusExceptions.IllegalValue:
+                    _LOGGER.debug(f"I{unit} Read IllegalValue: {result}")
+                    raise ModbusIllegalValue(result)
+
+            raise ModbusReadError(result)
+
+        _LOGGER.debug(
+            f"I{unit}: Registers received={len(result.registers)} "
+            f"requested={rcount} address={address} "
+            f"result={result}"
+        )
+
+        if len(result.registers) != rcount:
+            raise ModbusReadError(
+                f"I{unit}: Registers received != requested : "
+                f"{len(result.registers)} != {rcount} at {address}"
+            )
+
+        return result
+
     async def modbus_read_holding_registers(self, unit, address, rcount):
         """Read modbus registers from inverter."""
 
+        if self._lock_holder is asyncio.current_task():
+            return await self._read_registers_unlocked(unit, address, rcount)
+
         async with self._modbus_lock:
-            _LOGGER.debug(
-                f"I{unit}: modbus_read_holding_registers "
-                f"address={address} count={rcount}"
-            )
+            self._lock_holder = asyncio.current_task()
+            try:
+                return await self._read_registers_unlocked(unit, address, rcount)
+            finally:
+                self._lock_holder = None
 
-            if self._use_device_id_param:
-                result = await self._client.read_holding_registers(
-                    address=address, count=rcount, device_id=unit
-                )
-            else:
-                result = await self._client.read_holding_registers(
-                    address=address, count=rcount, slave=unit
-                )
+    async def _poll_device_with_lock(self, device) -> None:
+        """Poll a single device while holding the modbus lock.
 
-            _LOGGER.debug(f"I{unit}: result is error: {result.isError()} ")
-
-            if result.isError():
-                _LOGGER.debug(f"I{unit}: error result: {type(result)} ")
-
-                if type(result) is ModbusIOException:
-                    raise ModbusIOError(result)
-
-                if type(result) is ExceptionResponse:
-                    if result.exception_code == ModbusExceptions.IllegalAddress:
-                        _LOGGER.debug(f"I{unit} Read IllegalAddress: {result}")
-                        raise ModbusIllegalAddress(result)
-
-                    if result.exception_code == ModbusExceptions.IllegalFunction:
-                        _LOGGER.debug(f"I{unit} Read IllegalFunction: {result}")
-                        raise ModbusIllegalFunction(result)
-
-                    if result.exception_code == ModbusExceptions.IllegalValue:
-                        _LOGGER.debug(f"I{unit} Read IllegalValue: {result}")
-                        raise ModbusIllegalValue(result)
-
-                raise ModbusReadError(result)
-
-            _LOGGER.debug(
-                f"I{unit}: Registers received={len(result.registers)} "
-                f"requested={rcount} address={address} "
-                f"result={result}"
-            )
-
-            if len(result.registers) != rcount:
-                raise ModbusReadError(
-                    f"I{unit}: Registers received != requested : "
-                    f"{len(result.registers)} != {rcount} at {address}"
-                )
-
-            return result
+        Holds the lock for the entire device read cycle, ensuring all
+        registers for one unit_id are read atomically before moving to
+        the next device. This prevents Modbus transaction ID confusion
+        when SolarEdge firmware returns incorrect unit_id in responses.
+        """
+        async with self._modbus_lock:
+            self._lock_holder = asyncio.current_task()
+            try:
+                await device.read_modbus_data()
+            finally:
+                self._lock_holder = None
 
     async def write_registers(self, unit: int, address: int, payload) -> None:
         """Write modbus registers to inverter."""
@@ -772,12 +806,14 @@ class SolarEdgeModbusMultiHub:
 
     @property
     def coordinator_timeout(self) -> int:
-        """Calculate coordinator timeout accounting for lock serialization.
+        """Calculate coordinator timeout for sequential polling with batch lock.
 
-        Although asyncio.gather() is used, the _modbus_lock serializes all
-        Modbus operations. However, the timeout is adjusted to be more realistic:
-        - SolarEdgeTimeouts.Inverter (8.4s) is worst-case, not typical read time
-        - Use base timeout + smaller per-device increment instead of full multiply
+        Devices are polled sequentially, each holding the lock for their
+        entire read cycle. Timeout is the sum of per-device budgets:
+        - SolarEdgeTimeouts.Inverter (3s) base for first inverter
+        - SolarEdgeTimeouts.Device (0.5s) per additional device
+        - SolarEdgeTimeouts.Init (0.8s) per device during discovery
+        - SolarEdgeTimeouts.Read (2s) per extra read block
         """
         if not self.initalized:
             # Init: need time for discovery of all devices
@@ -999,10 +1035,14 @@ class SolarEdgeInverter:
         """Read and update dynamic modbus registers."""
 
         try:
+            # Merged read: address=40044 rcount=65 covers both C_Version
+            # (40044-40051, 8 regs) and main inverter data (40069-40108, 40 regs).
+            # Gap of 17 unused registers (40052-40068) is included in the read.
             inverter_data = await self.hub.modbus_read_holding_registers(
-                unit=self.inverter_unit_id, address=40044, rcount=8
+                unit=self.inverter_unit_id, address=40044, rcount=65
             )
 
+            # C_Version: registers[0:8] (address 40044-40051)
             self.decoded_common["C_Version"] = int_list_to_string(
                 ModbusClientMixin.convert_from_registers(
                     inverter_data.registers[0:8],
@@ -1010,10 +1050,8 @@ class SolarEdgeInverter:
                 )
             )
 
-            inverter_data = await self.hub.modbus_read_holding_registers(
-                unit=self.inverter_unit_id, address=40069, rcount=40
-            )
-
+            # Main inverter data starts at offset 25 (address 40069 - 40044 = 25)
+            # All register indices below are offset +25 from the original code.
             uint16_fields = [
                 "C_SunSpec_DID",
                 "C_SunSpec_Length",
@@ -1033,11 +1071,11 @@ class SolarEdgeInverter:
                 "I_DC_Voltage",
             ]
             uint16_data = (
-                inverter_data.registers[0:6]
-                + inverter_data.registers[7:13]
-                + [inverter_data.registers[16]]
-                + inverter_data.registers[26:28]
-                + [inverter_data.registers[29]]
+                inverter_data.registers[25:31]
+                + inverter_data.registers[32:38]
+                + [inverter_data.registers[41]]
+                + inverter_data.registers[51:53]
+                + [inverter_data.registers[54]]
             )
             self.decoded_model = dict(
                 zip(
@@ -1075,11 +1113,11 @@ class SolarEdgeInverter:
                 "I_Status_Vendor",
             ]
             int16_data = (
-                [inverter_data.registers[6]]
-                + inverter_data.registers[13:16]
-                + inverter_data.registers[17:24]
-                + [inverter_data.registers[28]]
-                + inverter_data.registers[30:40]
+                [inverter_data.registers[31]]
+                + inverter_data.registers[38:41]
+                + inverter_data.registers[42:49]
+                + [inverter_data.registers[53]]
+                + inverter_data.registers[55:65]
             )
             self.decoded_model.update(
                 dict(
@@ -1097,7 +1135,7 @@ class SolarEdgeInverter:
             self.decoded_model.update(
                 {
                     "AC_Energy_WH": ModbusClientMixin.convert_from_registers(
-                        inverter_data.registers[24:26],
+                        inverter_data.registers[49:51],
                         data_type=ModbusClientMixin.DATATYPE.UINT32,
                     ),
                 }
