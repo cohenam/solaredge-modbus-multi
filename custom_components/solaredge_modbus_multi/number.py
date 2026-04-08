@@ -64,20 +64,18 @@ async def async_setup_entry(
             )
 
     """ Power Control Block """
-    if hub.option_detect_extras and inverter.advanced_power_control:
+    if hub.option_detect_extras:
         for inverter in hub.inverters:
-            entities.append(SolarEdgePowerReduce(inverter, config_entry, coordinator))
-            entities.append(SolarEdgeCurrentLimit(inverter, config_entry, coordinator))
+            if inverter.advanced_power_control:
+                entities.append(
+                    SolarEdgePowerReduce(inverter, config_entry, coordinator)
+                )
+                entities.append(
+                    SolarEdgeCurrentLimit(inverter, config_entry, coordinator)
+                )
 
     if entities:
         async_add_entities(entities)
-
-
-def get_key(d, search):
-    for k, v in d.items():
-        if v == search:
-            return k
-    return None
 
 
 class SolarEdgeNumberBase(CoordinatorEntity, NumberEntity):

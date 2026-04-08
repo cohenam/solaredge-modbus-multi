@@ -1708,7 +1708,7 @@ class MeterVAhIE(SolarEdgeSensorBase):
                 )
 
                 try:
-                    return update_accum(self, value, value)
+                    return update_accum(self, value)
                 except Exception:
                     return None
 
@@ -1786,7 +1786,7 @@ class MetervarhIE(SolarEdgeSensorBase):
                 )
 
                 try:
-                    return update_accum(self, value, value)
+                    return update_accum(self, value)
                 except Exception:
                     return None
 
