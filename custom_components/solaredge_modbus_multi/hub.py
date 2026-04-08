@@ -362,7 +362,15 @@ class SolarEdgeModbusMultiHub:
             TimeoutError,
         ) as e:
             await self.disconnect()
-            raise HubInitFailed(f"{type(e).__name__}: {e}")
+            if isinstance(e, ModbusReadError):
+                raise HubInitFailed(f"Read error: {e}")
+            if isinstance(e, DeviceInvalid):
+                raise HubInitFailed(f"Invalid device: {e}")
+            if isinstance(e, ConnectionException):
+                raise HubInitFailed(f"Connection failed: {e}")
+            if isinstance(e, ModbusIOException):
+                raise HubInitFailed(f"Modbus error: {e}")
+            raise HubInitFailed(f"Timeout error: {e}")
 
         self.initalized = True
 
@@ -434,7 +442,13 @@ class SolarEdgeModbusMultiHub:
             ModbusIOException,
         ) as e:
             await self.disconnect()
-            raise DataUpdateFailed(f"{type(e).__name__}: {e}")
+            if isinstance(e, ModbusReadError):
+                raise DataUpdateFailed(f"Update failed: {e}")
+            if isinstance(e, DeviceInvalid):
+                raise DataUpdateFailed(f"Invalid device: {e}")
+            if isinstance(e, ConnectionException):
+                raise DataUpdateFailed(f"Connection failed: {e}")
+            raise DataUpdateFailed(f"Modbus error: {e}")
 
         except TimeoutError as e:
             await self.disconnect(clear_client=True)
