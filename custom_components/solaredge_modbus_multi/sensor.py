@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from awesomeversion import AwesomeVersion
 from homeassistant.components.sensor import (
@@ -508,6 +508,8 @@ class SolarEdgeModbusSensor(SolarEdgeSensorBase):
                 raise RuntimeError(f"SolarEdgeModbusSensor C_SunSpec_DID {did}")
         else:
             self._sunspec_not_impl = description.sunspec_not_impl
+        # Backward-compatible alias used by the legacy sensor tests.
+        self.SUNSPEC_NOT_IMPL = self._sunspec_not_impl
 
         # Build the model key including phase
         phase = description.phase
@@ -605,6 +607,165 @@ class SolarEdgeModbusSensor(SolarEdgeSensorBase):
                 return None
 
         return None
+
+
+def _legacy_description(
+    platform,
+    uid_suffix: str,
+    phase: str | None = None,
+) -> SolarEdgeSensorEntityDescription:
+    """Resolve the matching description for legacy wrapper classes."""
+
+    did = platform.decoded_model["C_SunSpec_DID"]
+    if did in (101, 102, 103):
+        descriptions = INVERTER_SENSOR_DESCRIPTIONS
+    elif did in (201, 202, 203, 204):
+        descriptions = METER_SENSOR_DESCRIPTIONS
+    else:
+        raise RuntimeError(f"Unsupported C_SunSpec_DID {did}")
+
+    for desc in descriptions:
+        if desc.uid_suffix == uid_suffix and desc.phase == phase:
+            return desc
+
+    if phase is not None:
+        for desc in descriptions:
+            if desc.uid_suffix == uid_suffix:
+                return replace(desc, phase=phase)
+
+    raise RuntimeError(f"No description found for {uid_suffix=} {phase=}")
+
+
+class ACCurrentSensor(SolarEdgeModbusSensor):
+    """Backward-compatible wrapper for current sensors."""
+
+    def __init__(self, platform, config_entry, coordinator, phase: str = None):
+        super().__init__(
+            platform,
+            config_entry,
+            coordinator,
+            _legacy_description(platform, "ac_current", phase),
+        )
+
+
+class VoltageSensor(SolarEdgeModbusSensor):
+    """Backward-compatible wrapper for voltage sensors."""
+
+    def __init__(self, platform, config_entry, coordinator, phase: str = None):
+        super().__init__(
+            platform,
+            config_entry,
+            coordinator,
+            _legacy_description(platform, "ac_voltage", phase),
+        )
+
+
+class ACPower(SolarEdgeModbusSensor):
+    """Backward-compatible wrapper for AC power sensors."""
+
+    def __init__(self, platform, config_entry, coordinator, phase: str = None):
+        super().__init__(
+            platform,
+            config_entry,
+            coordinator,
+            _legacy_description(platform, "ac_power", phase),
+        )
+
+
+class ACFrequency(SolarEdgeModbusSensor):
+    """Backward-compatible wrapper for frequency sensors."""
+
+    def __init__(self, platform, config_entry, coordinator):
+        super().__init__(
+            platform,
+            config_entry,
+            coordinator,
+            _legacy_description(platform, "ac_frequency"),
+        )
+
+
+class ACVoltAmp(SolarEdgeModbusSensor):
+    """Backward-compatible wrapper for apparent power sensors."""
+
+    def __init__(self, platform, config_entry, coordinator, phase: str = None):
+        super().__init__(
+            platform,
+            config_entry,
+            coordinator,
+            _legacy_description(platform, "ac_va", phase),
+        )
+
+
+class ACVoltAmpReactive(SolarEdgeModbusSensor):
+    """Backward-compatible wrapper for reactive power sensors."""
+
+    def __init__(self, platform, config_entry, coordinator, phase: str = None):
+        super().__init__(
+            platform,
+            config_entry,
+            coordinator,
+            _legacy_description(platform, "ac_var", phase),
+        )
+
+
+class ACPowerFactor(SolarEdgeModbusSensor):
+    """Backward-compatible wrapper for power factor sensors."""
+
+    def __init__(self, platform, config_entry, coordinator, phase: str = None):
+        super().__init__(
+            platform,
+            config_entry,
+            coordinator,
+            _legacy_description(platform, "ac_pf", phase),
+        )
+
+
+class DCCurrent(SolarEdgeModbusSensor):
+    """Backward-compatible wrapper for inverter DC current sensors."""
+
+    def __init__(self, platform, config_entry, coordinator):
+        super().__init__(
+            platform,
+            config_entry,
+            coordinator,
+            _legacy_description(platform, "dc_current"),
+        )
+
+
+class DCVoltage(SolarEdgeModbusSensor):
+    """Backward-compatible wrapper for inverter DC voltage sensors."""
+
+    def __init__(self, platform, config_entry, coordinator):
+        super().__init__(
+            platform,
+            config_entry,
+            coordinator,
+            _legacy_description(platform, "dc_voltage"),
+        )
+
+
+class DCPower(SolarEdgeModbusSensor):
+    """Backward-compatible wrapper for inverter DC power sensors."""
+
+    def __init__(self, platform, config_entry, coordinator):
+        super().__init__(
+            platform,
+            config_entry,
+            coordinator,
+            _legacy_description(platform, "dc_power"),
+        )
+
+
+class HeatSinkTemperature(SolarEdgeModbusSensor):
+    """Backward-compatible wrapper for inverter heat sink temperature sensors."""
+
+    def __init__(self, platform, config_entry, coordinator):
+        super().__init__(
+            platform,
+            config_entry,
+            coordinator,
+            _legacy_description(platform, "temp_sink"),
+        )
 
 
 # ---------------------------------------------------------------------------
