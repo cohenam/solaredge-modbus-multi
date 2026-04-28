@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import logging
 import re
 from dataclasses import dataclass, replace
@@ -2421,6 +2422,27 @@ class SolarEdgeTemperatureMMPPT(SolarEdgeSensorBase):
         return self._platform.inverter.decoded_model[self._platform.mmppt_key]["Tmp"]
 
 
+class SolarEdgeLastUpdate(SolarEdgeSensorBase):
+    device_class = SensorDeviceClass.TIMESTAMP
+    entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._platform.uid_base}_last_update_timestamp"
+
+    @property
+    def name(self) -> str:
+        return "Last Update"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> datetime.datetime | None:
+        return self._platform.last_update
+
+
 # ---------------------------------------------------------------------------
 # async_setup_entry
 # ---------------------------------------------------------------------------
@@ -2438,6 +2460,7 @@ async def async_setup_entry(
 
     for inverter in hub.inverters:
         # Custom (Category B) inverter sensors
+        entities.append(SolarEdgeLastUpdate(inverter, config_entry, coordinator))
         entities.append(SolarEdgeDevice(inverter, config_entry, coordinator))
         entities.append(Version(inverter, config_entry, coordinator))
         entities.append(SolarEdgeInverterStatus(inverter, config_entry, coordinator))
@@ -2485,6 +2508,7 @@ async def async_setup_entry(
 
     for meter in hub.meters:
         # Custom (Category B) meter sensors
+        entities.append(SolarEdgeLastUpdate(meter, config_entry, coordinator))
         entities.append(SolarEdgeDevice(meter, config_entry, coordinator))
         entities.append(Version(meter, config_entry, coordinator))
         entities.append(MeterEvents(meter, config_entry, coordinator))
@@ -2544,6 +2568,7 @@ async def async_setup_entry(
             entities.append(MetervarhIE(meter, config_entry, coordinator, phase))
 
     for battery in hub.batteries:
+        entities.append(SolarEdgeLastUpdate(battery, config_entry, coordinator))
         entities.append(SolarEdgeDevice(battery, config_entry, coordinator))
         entities.append(Version(battery, config_entry, coordinator))
         entities.append(SolarEdgeBatteryAvgTemp(battery, config_entry, coordinator))
