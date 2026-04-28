@@ -9,6 +9,7 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.util import dt
 from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException, ModbusIOException
 
@@ -358,6 +359,14 @@ class SolarEdgeModbusMultiHub:
             for bat in self.batteries:
                 await self._poll_device_with_lock(bat)
 
+            timestamp = dt.now()
+            for inverter in self.inverters:
+                inverter.set_last_update(timestamp)
+            for meter in self.meters:
+                meter.set_last_update(timestamp)
+            for battery in self.batteries:
+                battery.set_last_update(timestamp)
+
         except (
             ModbusReadError,
             DeviceInvalid,
@@ -476,6 +485,14 @@ class SolarEdgeModbusMultiHub:
 
         if not self.keep_modbus_open:
             await self.disconnect()
+
+        timestamp = dt.now()
+        for inverter in self.inverters:
+            inverter.set_last_update(timestamp)
+        for meter in self.meters:
+            meter.set_last_update(timestamp)
+        for battery in self.batteries:
+            battery.set_last_update(timestamp)
 
         return True
 

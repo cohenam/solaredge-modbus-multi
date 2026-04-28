@@ -48,6 +48,7 @@ class SolarEdgeInverter:
         self.advanced_power_control = None
         self.site_limit_control = None
         self._grid_status = None
+        self._last_update_timestamp = None
 
     async def init_device(self) -> None:
         """Set up data about the device from modbus."""
@@ -1013,6 +1014,13 @@ class SolarEdgeInverter:
 
         return True
 
+    def set_last_update(self, timestamp) -> None:
+        self._last_update_timestamp = timestamp
+
+    @property
+    def last_update(self):
+        return self._last_update_timestamp
+
 
 class SolarEdgeMMPPTUnit:
     """Defines a SolarEdge inverter MMPPT unit."""
@@ -1067,6 +1075,7 @@ class SolarEdgeMeter:
         self.inverter_common = self.hub.inverter_common[self.inverter_unit_id]
         self.mmppt_common = self.hub.mmppt_common[self.inverter_unit_id]
         self._via_device = None
+        self._last_update_timestamp = None
 
         try:
             self.start_address = METER_REG_BASE[self.meter_id]
@@ -1375,6 +1384,13 @@ class SolarEdgeMeter:
     def via_device(self, device: str) -> None:
         self._via_device = (DOMAIN, device)
 
+    def set_last_update(self, timestamp) -> None:
+        self._last_update_timestamp = timestamp
+
+    @property
+    def last_update(self):
+        return self._last_update_timestamp
+
 
 class SolarEdgeBattery:
     """Defines a SolarEdge battery."""
@@ -1391,6 +1407,7 @@ class SolarEdgeBattery:
         self.has_parent = True
         self.inverter_common = self.hub.inverter_common[self.inverter_unit_id]
         self._via_device = None
+        self._last_update_timestamp = None
 
         try:
             self.start_address = BATTERY_REG_BASE[self.battery_id]
@@ -1680,3 +1697,10 @@ class SolarEdgeBattery:
     @property
     def battery_energy_reset_cycles(self) -> int:
         return self.hub.battery_energy_reset_cycles
+
+    def set_last_update(self, timestamp) -> None:
+        self._last_update_timestamp = timestamp
+
+    @property
+    def last_update(self):
+        return self._last_update_timestamp
