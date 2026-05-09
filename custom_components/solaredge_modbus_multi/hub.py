@@ -6,6 +6,11 @@ import importlib.metadata
 import inspect
 import logging
 
+from awesomeversion import AwesomeVersion
+from awesomeversion.exceptions import (
+    AwesomeVersionCompareException,
+    AwesomeVersionStrategyException,
+)
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -28,6 +33,7 @@ from .const import (
     DOMAIN,
     METER_REG_BASE,
     PYMODBUS_REQUIRED_VERSION,
+    STATUS_VENDOR4_VERSION,
     ConfDefaultFlag,
     ConfDefaultInt,
     ConfDefaultStr,
@@ -862,9 +868,9 @@ class SolarEdgeInverter:
         self.inverter_unit_id = device_id
         self.hub = hub
         self.mmppt_units = []
-        self.decoded_common = []
-        self.decoded_model = []
-        self.decoded_mmppt = []
+        self.decoded_common = {}
+        self.decoded_model = {}
+        self.decoded_mmppt = {}
         self.decoded_storage_control = None
         self.has_parent = False
         self.has_battery = None
@@ -873,6 +879,7 @@ class SolarEdgeInverter:
         self.site_limit_control = None
         self._grid_status = None
         self._last_update_timestamp = None
+        self._use_status_vendor4 = False
 
     async def init_device(self) -> None:
         """Set up data about the device from modbus."""
@@ -1032,6 +1039,16 @@ class SolarEdgeInverter:
         self.name = f"{self.hub.hub_id.capitalize()} I{self.inverter_unit_id}"
         self.uid_base = f"{self.model}_{self.serial}"
 
+        try:
+            this_ver = AwesomeVersion(self.decoded_common["C_Version"])
+            self._use_status_vendor4 = this_ver >= AwesomeVersion(
+                STATUS_VENDOR4_VERSION
+            )
+        except (AwesomeVersionCompareException, AwesomeVersionStrategyException) as e:
+            _LOGGER.error(
+                f"Error checking inverter version: {e}. Please report this issue."
+            )
+
         if self.decoded_mmppt is not None:
             for unit_index in range(self.decoded_mmppt["mmppt_Units"]):
                 self.mmppt_units.append(SolarEdgeMMPPTUnit(self, self.hub, unit_index))
@@ -1125,6 +1142,7 @@ class SolarEdgeInverter:
                 + [inverter_data.registers[53]]
                 + inverter_data.registers[55:65]
             )
+
             self.decoded_model.update(
                 dict(
                     zip(
@@ -1146,6 +1164,24 @@ class SolarEdgeInverter:
                     ),
                 }
             )
+
+            if self.use_status_vendor4:
+                inverter_data = await self.hub.modbus_read_holding_registers(
+                    unit=self.inverter_unit_id, address=40119, rcount=2
+                )
+                self.decoded_model.update(
+                    dict(
+                        [
+                            (
+                                "I_Status_Vendor4",
+                                ModbusClientMixin.convert_from_registers(
+                                    inverter_data.registers[0:2],
+                                    data_type=ModbusClientMixin.DATATYPE.UINT32,
+                                ),
+                            ),
+                        ]
+                    )
+                )
 
             if (
                 self.decoded_model["C_SunSpec_DID"] == SunSpecNotImpl.UINT16
@@ -1845,6 +1881,10 @@ class SolarEdgeInverter:
     def last_update(self) -> datetime.datetime | None:
         return self._last_update_timestamp
 
+    @property
+    def use_status_vendor4(self) -> bool:
+        return self._use_status_vendor4
+
 
 class SolarEdgeMMPPTUnit:
     """Defines a SolarEdge inverter MMPPT unit."""
@@ -1892,8 +1932,8 @@ class SolarEdgeMeter:
     ) -> None:
         self.inverter_unit_id = device_id
         self.hub = hub
-        self.decoded_common = []
-        self.decoded_model = []
+        self.decoded_common = {}
+        self.decoded_model = {}
         self.meter_id = meter_id
         self.has_parent = True
         self.inverter_common = self.hub.inverter_common[self.inverter_unit_id]
@@ -2224,8 +2264,8 @@ class SolarEdgeBattery:
     ) -> None:
         self.inverter_unit_id = device_id
         self.hub = hub
-        self.decoded_common = []
-        self.decoded_model = []
+        self.decoded_common = {}
+        self.decoded_model = {}
         self.start_address = None
         self.battery_id = battery_id
         self.has_parent = True
