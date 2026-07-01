@@ -30,6 +30,7 @@ except ImportError:
 
 from .const import (
     BATTERY_REG_BASE,
+    DETECT_EVSE_REGEX,
     DOMAIN,
     METER_REG_BASE,
     PYMODBUS_REQUIRED_VERSION,
@@ -64,6 +65,12 @@ class HubInitFailed(SolarEdgeException):
 
 class DeviceInitFailed(SolarEdgeException):
     """Raised when a device can't be initialized"""
+
+    pass
+
+
+class DeviceIsEVSE(SolarEdgeException):
+    """Raised when an inverter device matches a EVSE model"""
 
     pass
 
@@ -186,6 +193,7 @@ class SolarEdgeModbusMultiHub:
         self.inverters = []
         self.meters = []
         self.batteries = []
+        self.evses = []
         self.inverter_common = {}
         self.mmppt_common = {}
         self.has_write = None
@@ -286,6 +294,17 @@ class SolarEdgeModbusMultiHub:
                 _LOGGER.error(f"Inverter at {self.hub_host} ID {inverter_unit_id}: {e}")
                 raise HubInitFailed(f"{e}")
 
+            except DeviceIsEVSE as e:
+                _LOGGER.debug(
+                    f"Device model matches EVSE at {self.hub_host} ID {inverter_unit_id}: {e}"
+                )
+                new_evse = SolarEdgeEVSE(inverter_unit_id, self)
+                await new_evse.init_device()
+                self.evses.append(new_evse)
+
+                # Skip meter and battery detection if DeviceIsEVSE
+                continue
+
             if self._detect_meters:
                 for meter_id in METER_REG_BASE:
                     try:
@@ -361,6 +380,8 @@ class SolarEdgeModbusMultiHub:
                 await self._poll_device_with_lock(meter)
             for bat in self.batteries:
                 await self._poll_device_with_lock(bat)
+            for evse in self.evses:
+                await self._poll_device_with_lock(evse)
 
             timestamp = dt.now()
             for inverter in self.inverters:
@@ -450,6 +471,8 @@ class SolarEdgeModbusMultiHub:
                     await self._poll_device_with_lock(meter)
                 for bat in self.batteries:
                     await self._poll_device_with_lock(bat)
+                for evse in self.evses:
+                    await self._poll_device_with_lock(evse)
 
         except (
             ModbusReadError,
@@ -968,6 +991,9 @@ class SolarEdgeInverter:
                 f"ID {self.inverter_unit_id} is not a SunSpec inverter."
             )
 
+        if DETECT_EVSE_REGEX.match(self.decoded_common["C_Model"]):
+            raise DeviceIsEVSE(f"Model {self.decoded_common['C_Model']}")
+
         if (
             self.decoded_common["C_SunSpec_ID"] == SunSpecNotImpl.UINT32
             or self.decoded_common["C_SunSpec_DID"] == SunSpecNotImpl.UINT16
@@ -1092,6 +1118,8 @@ class SolarEdgeInverter:
                 "AC_Energy_WH_SF",
                 "I_DC_Current",
                 "I_DC_Voltage",
+                "I_Status",
+                "I_Status_Vendor",
             ]
             uint16_data = (
                 inverter_data.registers[25:31]
@@ -1099,6 +1127,7 @@ class SolarEdgeInverter:
                 + [inverter_data.registers[41]]
                 + inverter_data.registers[51:53]
                 + [inverter_data.registers[54]]
+                + inverter_data.registers[63:65]
             )
             self.decoded_model = dict(
                 zip(
@@ -1132,15 +1161,13 @@ class SolarEdgeInverter:
                 "I_Temp_Trns",
                 "I_Temp_Other",
                 "I_Temp_SF",
-                "I_Status",
-                "I_Status_Vendor",
             ]
             int16_data = (
                 [inverter_data.registers[31]]
                 + inverter_data.registers[38:41]
                 + inverter_data.registers[42:49]
                 + [inverter_data.registers[53]]
-                + inverter_data.registers[55:65]
+                + inverter_data.registers[55:63]
             )
 
             self.decoded_model.update(
@@ -2568,3 +2595,191 @@ class SolarEdgeBattery:
     @property
     def last_update(self) -> datetime.datetime | None:
         return self._last_update_timestamp
+
+
+class SolarEdgeEVSE:
+    """Class that defines a SolarEdge EVSE."""
+
+    def __init__(self, device_id: int, hub: SolarEdgeModbusMultiHub) -> None:
+        self.evse_unit_id = device_id
+        self.hub = hub
+        self.decoded_common = {}
+        self.decoded_model = {}
+        self.has_parent = False
+
+    async def init_device(self) -> None:
+        """Set up data about the device from modbus."""
+
+        try:
+            evse_data = await self.hub.modbus_read_holding_registers(
+                unit=self.evse_unit_id, address=40000, rcount=69
+            )
+
+            self.decoded_common = dict(
+                [
+                    (
+                        "C_SunSpec_ID",
+                        ModbusClientMixin.convert_from_registers(
+                            evse_data.registers[0:2],
+                            data_type=ModbusClientMixin.DATATYPE.UINT32,
+                        ),
+                    )
+                ]
+            )
+
+            uint16_fields = [
+                "C_SunSpec_DID",
+                "C_SunSpec_Length",
+                "C_Device_address",
+            ]
+            uint16_data = evse_data.registers[2:4] + [evse_data.registers[68]]
+            self.decoded_common.update(
+                dict(
+                    zip(
+                        uint16_fields,
+                        ModbusClientMixin.convert_from_registers(
+                            uint16_data,
+                            data_type=ModbusClientMixin.DATATYPE.UINT16,
+                        ),
+                    )
+                )
+            )
+
+            self.decoded_common.update(
+                dict(
+                    [
+                        (
+                            "C_Manufacturer",  # string(32)
+                            int_list_to_string(
+                                ModbusClientMixin.convert_from_registers(
+                                    evse_data.registers[4:20],
+                                    data_type=ModbusClientMixin.DATATYPE.UINT16,
+                                )
+                            ),
+                        ),
+                        (
+                            "C_Model",  # string(32)
+                            int_list_to_string(
+                                ModbusClientMixin.convert_from_registers(
+                                    evse_data.registers[20:36],
+                                    data_type=ModbusClientMixin.DATATYPE.UINT16,
+                                )
+                            ),
+                        ),
+                        (
+                            "C_Option",  # string(16)
+                            int_list_to_string(
+                                ModbusClientMixin.convert_from_registers(
+                                    evse_data.registers[36:44],
+                                    data_type=ModbusClientMixin.DATATYPE.UINT16,
+                                )
+                            ),
+                        ),
+                        (
+                            "C_Version",  # string(16)
+                            int_list_to_string(
+                                ModbusClientMixin.convert_from_registers(
+                                    evse_data.registers[44:52],
+                                    data_type=ModbusClientMixin.DATATYPE.UINT16,
+                                )
+                            ),
+                        ),
+                        (
+                            "C_SerialNumber",  # string(32)
+                            int_list_to_string(
+                                ModbusClientMixin.convert_from_registers(
+                                    evse_data.registers[52:68],
+                                    data_type=ModbusClientMixin.DATATYPE.UINT16,
+                                )
+                            ),
+                        ),
+                    ]
+                )
+            )
+
+            for name, value in iter(self.decoded_common.items()):
+                _LOGGER.debug(
+                    (
+                        f"E{self.evse_unit_id}: "
+                        f"{name} {hex(value) if isinstance(value, int) else value}"
+                        f"{type(value)}"
+                    ),
+                )
+
+        except ModbusIOError:
+            raise DeviceInvalid(f"No response from evse ID {self.evse_unit_id}")
+
+        except ModbusIllegalAddress:
+            raise DeviceInvalid(f"ID {self.evse_unit_id} is not SunSpec.")
+
+        if (
+            self.decoded_common["C_SunSpec_ID"] == SunSpecNotImpl.UINT32
+            or self.decoded_common["C_SunSpec_DID"] == SunSpecNotImpl.UINT16
+            or self.decoded_common["C_SunSpec_ID"] != 0x53756E53
+            or self.decoded_common["C_SunSpec_DID"] != 0x0001
+            or self.decoded_common["C_SunSpec_Length"] != 65
+        ):
+            raise DeviceInvalid(f"ID {self.evse_unit_id} is not SunSpec.")
+
+        self.manufacturer = self.decoded_common["C_Manufacturer"]
+        self.model = self.decoded_common["C_Model"]
+        self.option = self.decoded_common["C_Option"]
+        self.serial = self.decoded_common["C_SerialNumber"]
+        self.device_address = self.decoded_common["C_Device_address"]
+        self.name = f"{self.hub.hub_id.capitalize()} E{self.evse_unit_id}"
+        self.uid_base = f"{self.model}_{self.serial}"
+
+    async def read_modbus_data(self) -> None:
+        """Read and update dynamic modbus registers."""
+
+        try:
+            evse_data = await self.hub.modbus_read_holding_registers(
+                unit=self.evse_unit_id, address=40044, rcount=16
+            )
+
+            self.decoded_common["C_Version"] = int_list_to_string(
+                ModbusClientMixin.convert_from_registers(
+                    evse_data.registers[0:8],
+                    data_type=ModbusClientMixin.DATATYPE.UINT16,
+                )
+            )
+
+            for name, value in iter(self.decoded_model.items()):
+                if isinstance(value, float):
+                    display_value = float_to_hex(value)
+                else:
+                    display_value = hex(value) if isinstance(value, int) else value
+                _LOGGER.debug(
+                    f"E{self.evse_unit_id}: {name} {display_value} {type(value)}"
+                )
+
+        except ModbusIllegalAddress:
+            _LOGGER.error(f"E{self.evse_unit_id}: EVSE register(s) NOT available")
+
+        except ModbusIOError:
+            raise ModbusReadError(f"No response from EVSE ID {self.evse_unit_id}")
+
+    @property
+    def online(self) -> bool:
+        """Device is online."""
+        return self.hub.online
+
+    @property
+    def fw_version(self) -> str | None:
+        if "C_Version" in self.decoded_common:
+            return self.decoded_common["C_Version"]
+
+        return None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.uid_base)},
+            name=self.name,
+            manufacturer=self.manufacturer,
+            model=self.model,
+            serial_number=self.serial,
+            sw_version=self.fw_version,
+            hw_version=self.option,
+        )

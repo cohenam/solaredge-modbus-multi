@@ -36,6 +36,7 @@ from .const import (
     DOMAIN,
     ENERGY_VOLT_AMPERE_HOUR,
     ENERGY_VOLT_AMPERE_REACTIVE_HOUR,
+    INVERTED_POWER_VERSION,
     METER_EVENTS,
     MMPPT_EVENTS,
     RRCR_STATUS,
@@ -240,6 +241,9 @@ async def async_setup_entry(
         entities.append(SolarEdgeBatterySOH(battery, config_entry, coordinator))
         entities.append(SolarEdgeBatterySOE(battery, config_entry, coordinator))
         entities.append(SolarEdgeBatteryStatus(battery, config_entry, coordinator))
+
+    for evse in hub.evses:
+        entities.append(Version(evse, config_entry, coordinator))
 
     if entities:
         async_add_entities(entities)
@@ -632,7 +636,7 @@ class ACPowerInverted(ACPower):
 
     @property
     def entity_registry_enabled_default(self) -> bool:
-        return AwesomeVersion(HA_VERSION) < AwesomeVersion("2026.2")
+        return AwesomeVersion(HA_VERSION) < AwesomeVersion(INVERTED_POWER_VERSION)
 
     @property
     def native_value(self):
@@ -1317,7 +1321,7 @@ class SolarEdgeInverterStatus(SolarEdgeStatusSensor):
     @property
     def native_value(self):
         try:
-            if self._platform.decoded_model["I_Status"] == SunSpecNotImpl.INT16:
+            if self._platform.decoded_model["I_Status"] == SunSpecNotImpl.UINT16:
                 return None
 
             return str(DEVICE_STATUS[self._platform.decoded_model["I_Status"]])
@@ -1399,7 +1403,7 @@ class StatusVendor(SolarEdgeSensorBase):
     @property
     def native_value(self):
         try:
-            if self._platform.decoded_model["I_Status_Vendor"] == SunSpecNotImpl.INT16:
+            if self._platform.decoded_model["I_Status_Vendor"] == SunSpecNotImpl.UINT16:
                 return None
 
             else:
@@ -2027,7 +2031,7 @@ class SolarEdgeBatteryPowerInverted(SolarEdgeBatteryPower):
 
     @property
     def entity_registry_enabled_default(self) -> bool:
-        return AwesomeVersion(HA_VERSION) < AwesomeVersion("2026.2")
+        return AwesomeVersion(HA_VERSION) < AwesomeVersion(INVERTED_POWER_VERSION)
 
     @property
     def native_value(self):
