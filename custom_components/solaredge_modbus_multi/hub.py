@@ -1763,14 +1763,15 @@ class SolarEdgeInverter:
                 if not self.hub.is_connected:
                     await self.hub.connect()
 
-        for name, value in iter(self.decoded_model.items()):
-            if isinstance(value, float):
-                display_value = float_to_hex(value)
-            else:
-                display_value = hex(value) if isinstance(value, int) else value
-            _LOGGER.debug(
-                f"I{self.inverter_unit_id}: {name} {display_value} {type(value)}"
-            )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            for name, value in iter(self.decoded_model.items()):
+                if isinstance(value, float):
+                    display_value = float_to_hex(value)
+                else:
+                    display_value = hex(value) if isinstance(value, int) else value
+                _LOGGER.debug(
+                    f"I{self.inverter_unit_id}: {name} {display_value} {type(value)}"
+                )
 
         """ Power Control Options: Storage Control """
         if (
@@ -2230,14 +2231,15 @@ class SolarEdgeMeter:
                 f"No response from inverter ID {self.inverter_unit_id}"
             )
 
-        for name, value in iter(self.decoded_model.items()):
-            _LOGGER.debug(
-                (
-                    f"I{self.inverter_unit_id}M{self.meter_id}: "
-                    f"{name} {hex(value) if isinstance(value, int) else value} "
-                    f"{type(value)}"
-                ),
-            )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            for name, value in iter(self.decoded_model.items()):
+                _LOGGER.debug(
+                    (
+                        f"I{self.inverter_unit_id}M{self.meter_id}: "
+                        f"{name} {hex(value) if isinstance(value, int) else value} "
+                        f"{type(value)}"
+                    ),
+                )
 
         if (
             self.decoded_model["C_SunSpec_DID"] == SunSpecNotImpl.UINT16
@@ -2540,16 +2542,17 @@ class SolarEdgeBattery:
                 f"No response from inverter ID {self.inverter_unit_id}"
             )
 
-        for name, value in iter(self.decoded_model.items()):
-            if isinstance(value, float):
-                display_value = float_to_hex(value)
-            else:
-                display_value = hex(value) if isinstance(value, int) else value
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            for name, value in iter(self.decoded_model.items()):
+                if isinstance(value, float):
+                    display_value = float_to_hex(value)
+                else:
+                    display_value = hex(value) if isinstance(value, int) else value
 
-            _LOGGER.debug(
-                f"I{self.inverter_unit_id}B{self.battery_id}: "
-                f"{name} {display_value} {type(value)}"
-            )
+                _LOGGER.debug(
+                    f"I{self.inverter_unit_id}B{self.battery_id}: "
+                    f"{name} {display_value} {type(value)}"
+                )
 
     def set_last_update(self, timestamp) -> None:
         self._last_update_timestamp = timestamp
@@ -2744,14 +2747,15 @@ class SolarEdgeEVSE:
                 )
             )
 
-            for name, value in iter(self.decoded_model.items()):
-                if isinstance(value, float):
-                    display_value = float_to_hex(value)
-                else:
-                    display_value = hex(value) if isinstance(value, int) else value
-                _LOGGER.debug(
-                    f"E{self.evse_unit_id}: {name} {display_value} {type(value)}"
-                )
+            if _LOGGER.isEnabledFor(logging.DEBUG):
+                for name, value in iter(self.decoded_model.items()):
+                    if isinstance(value, float):
+                        display_value = float_to_hex(value)
+                    else:
+                        display_value = hex(value) if isinstance(value, int) else value
+                    _LOGGER.debug(
+                        f"E{self.evse_unit_id}: {name} {display_value} {type(value)}"
+                    )
 
         except ModbusIllegalAddress:
             _LOGGER.error(f"E{self.evse_unit_id}: EVSE register(s) NOT available")
