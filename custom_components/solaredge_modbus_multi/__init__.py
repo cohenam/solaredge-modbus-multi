@@ -262,9 +262,20 @@ class SolarEdgeCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> bool:
         try:
-            # Wait for any pending writes (with short sleep for responsiveness)
-            while self._hub.has_write:
-                await asyncio.sleep(0.1)  # Reduced from 1s to 100ms
+            # Wait for any pending writes, bounded so a cancelled write task
+            # (which would leave has_write set) can't stall polling forever.
+            # has_write is only legitimately held for sleep_after_write (<=60s).
+            try:
+                async with asyncio.timeout(self._hub.sleep_after_write + 5):
+                    while self._hub.has_write:
+                        await asyncio.sleep(0.1)
+            except TimeoutError:
+                _LOGGER.warning(
+                    "Pending write at address %s did not clear in time; "
+                    "clearing it and continuing with data refresh",
+                    self._hub.has_write,
+                )
+                self._hub.has_write = None
 
             return await self._refresh_modbus_data_with_retry(
                 ex_type=DataUpdateFailed,
