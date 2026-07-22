@@ -318,7 +318,7 @@ class SolarEdgeModbusMultiHub:
             ),
         )
         self._poll_cycle = -1
-        self._force_slow_poll = False
+        self._slow_poll_requests = 0
         self.slow_poll_due = True
         self._retry_limit = self._yaml_config.get("retry", {}).get(
             "limit", RetrySettings.Limit
@@ -619,10 +619,14 @@ class SolarEdgeModbusMultiHub:
 
         # Decide the tier for this attempt, but only commit the cycle state
         # after a successful poll: a failed attempt must not consume a due
-        # (or write-forced) slow poll.
+        # (or write-forced) slow poll. Write-forced polls are counted, not
+        # flagged, so a write landing mid-refresh keeps its request pending
+        # instead of being cleared by this refresh's completion.
         next_cycle = self._poll_cycle + 1
+        served_slow_poll_requests = self._slow_poll_requests
         self.slow_poll_due = (
-            self._force_slow_poll or next_cycle % self._slow_poll_multiplier == 0
+            served_slow_poll_requests > 0
+            or next_cycle % self._slow_poll_multiplier == 0
         )
 
         try:
@@ -667,7 +671,9 @@ class SolarEdgeModbusMultiHub:
             raise DataUpdateFailed(f"Timeout error: {e}")
 
         self._poll_cycle = next_cycle
-        self._force_slow_poll = False
+        # Consume only the requests this poll actually served; requests from
+        # writes that landed during the refresh stay pending for the next one.
+        self._slow_poll_requests -= served_slow_poll_requests
 
         if self._timeout_counter > 0:
             _LOGGER.debug(
@@ -895,8 +901,9 @@ class SolarEdgeModbusMultiHub:
             raise ModbusWriteError(result)
 
         self.has_write = address
-        # Control registers changed: re-read the slow blocks on the next poll
-        self._force_slow_poll = True
+        # Control registers changed: request a slow-block re-read. A counter
+        # (not a flag) so an in-flight refresh can't consume this request.
+        self._slow_poll_requests += 1
 
         if self.sleep_after_write > 0:
             _LOGGER.debug(

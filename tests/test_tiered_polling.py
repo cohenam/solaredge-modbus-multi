@@ -131,7 +131,7 @@ async def test_write_forces_slow_poll(mock_hub) -> None:
     await mock_hub.async_refresh_modbus_data()
     assert mock_hub.slow_poll_due is False
 
-    mock_hub._force_slow_poll = True
+    mock_hub._slow_poll_requests += 1
 
     # Cycle 2 would be off-cycle, but the write forces a slow poll
     await mock_hub.async_refresh_modbus_data()
@@ -234,7 +234,7 @@ async def test_failed_poll_preserves_forced_slow_poll(mock_hub) -> None:
     await mock_hub.async_refresh_modbus_data()
     cycle_before = mock_hub._poll_cycle
 
-    mock_hub._force_slow_poll = True
+    mock_hub._slow_poll_requests += 1
 
     failing_inverter = MagicMock()
     failing_inverter.read_modbus_data = AsyncMock(side_effect=ModbusReadError("boom"))
@@ -244,11 +244,67 @@ async def test_failed_poll_preserves_forced_slow_poll(mock_hub) -> None:
         await mock_hub.async_refresh_modbus_data()
 
     # Failure must not commit the cycle or consume the forced slow poll
-    assert mock_hub._force_slow_poll is True
+    assert mock_hub._slow_poll_requests == 1
     assert mock_hub._poll_cycle == cycle_before
 
     # Next (successful) refresh performs the forced slow poll
     mock_hub.inverters = []
     await mock_hub.async_refresh_modbus_data()
     assert mock_hub.slow_poll_due is True
-    assert mock_hub._force_slow_poll is False
+    assert mock_hub._slow_poll_requests == 0
+
+
+async def test_write_registers_requests_slow_poll(mock_hub, mock_modbus_client) -> None:
+    """A successful write requests a slow-block re-read."""
+    mock_hub._sleep_after_write = 0
+    mock_client = mock_modbus_client.return_value
+    mock_client.write_registers.return_value = create_modbus_response([])
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await mock_hub.connect()
+        await mock_hub.write_registers(unit=1, address=57348, payload=[1])
+
+    assert mock_hub._slow_poll_requests == 1
+
+
+async def test_write_during_refresh_keeps_slow_poll_request(mock_hub) -> None:
+    """A write landing mid-refresh must not lose its forced slow poll.
+
+    Device-level locking allows write_registers to run between device
+    polls of an in-flight refresh. That refresh already snapshotted its
+    tier, so the write's request must survive the refresh completing.
+    """
+    from unittest.mock import AsyncMock
+
+    mock_hub.initalized = True
+    mock_hub._keep_modbus_open = True
+    mock_hub._client = MagicMock()
+    mock_hub._client.connected = True
+
+    # Cycles 0 and 1: cycle 2 will be an off-cycle (multiplier 3)
+    await mock_hub.async_refresh_modbus_data()
+    await mock_hub.async_refresh_modbus_data()
+
+    async def write_lands_between_device_polls():
+        # Same effect write_registers has on tier state (covered by
+        # test_write_registers_requests_slow_poll), at the exact
+        # interleaving point: during an in-flight refresh.
+        mock_hub._slow_poll_requests += 1
+
+    inverter = MagicMock()
+    inverter.read_modbus_data = AsyncMock(side_effect=write_lands_between_device_polls)
+    inverter.set_last_update = MagicMock()
+    mock_hub.inverters = [inverter]
+
+    await mock_hub.async_refresh_modbus_data()
+    assert mock_hub.slow_poll_due is False  # this refresh stayed fast
+    assert mock_hub._slow_poll_requests == 1  # request not clobbered
+
+    # The very next refresh serves the write's forced slow poll
+    mock_hub.inverters = []
+    await mock_hub.async_refresh_modbus_data()
+    assert mock_hub.slow_poll_due is True
+    assert mock_hub._slow_poll_requests == 0
