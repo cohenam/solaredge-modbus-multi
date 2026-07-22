@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.number import NumberEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
     UnitOfElectricCurrent,
@@ -11,25 +10,26 @@ from homeassistant.const import (
     UnitOfPower,
     UnitOfTime,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from pymodbus.client.mixin import ModbusClientMixin
 
-from .const import DOMAIN, BatteryLimit, SunSpecNotImpl
-from .helpers import float_to_hex
+from . import SolarEdgeConfigEntry
+from .const import BatteryLimit, SunSpecNotImpl
+from .entity import SolarEdgeEntityBase
+from .helpers import is_float32_not_impl
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: SolarEdgeConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    hub = hass.data[DOMAIN][config_entry.entry_id]["hub"]
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
+    hub = config_entry.runtime_data.hub
+    coordinator = config_entry.runtime_data.coordinator
 
     entities = []
 
@@ -72,37 +72,8 @@ async def async_setup_entry(
         async_add_entities(entities)
 
 
-class SolarEdgeNumberBase(CoordinatorEntity, NumberEntity):
-    should_poll = False
-    _attr_has_entity_name = True
+class SolarEdgeNumberBase(SolarEdgeEntityBase, NumberEntity):
     entity_category = EntityCategory.CONFIG
-
-    def __init__(self, platform, config_entry, coordinator):
-        """Pass coordinator to CoordinatorEntity."""
-        super().__init__(coordinator)
-        """Initialize the number."""
-        self._platform = platform
-        self._config_entry = config_entry
-
-    @property
-    def device_info(self):
-        return self._platform.device_info
-
-    @property
-    def config_entry_id(self):
-        return self._config_entry.entry_id
-
-    @property
-    def config_entry_name(self):
-        return self._config_entry.data["name"]
-
-    @property
-    def available(self) -> bool:
-        return super().available and self._platform.online
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        self.async_write_ha_state()
 
 
 class StorageACChargeLimit(SolarEdgeNumberBase):
@@ -125,10 +96,9 @@ class StorageACChargeLimit(SolarEdgeNumberBase):
         try:
             if (
                 self._platform.decoded_storage_control is False
-                or float_to_hex(
+                or is_float32_not_impl(
                     self._platform.decoded_storage_control["ac_charge_limit"]
                 )
-                == hex(SunSpecNotImpl.FLOAT32)
                 or self._platform.decoded_storage_control["ac_charge_limit"] < 0
             ):
                 return False
@@ -205,10 +175,9 @@ class StorageBackupReserve(SolarEdgeNumberBase):
         try:
             if (
                 self._platform.decoded_storage_control is False
-                or float_to_hex(
+                or is_float32_not_impl(
                     self._platform.decoded_storage_control["backup_reserve"]
                 )
-                == hex(SunSpecNotImpl.FLOAT32)
                 or self._platform.decoded_storage_control["backup_reserve"] < 0
                 or self._platform.decoded_storage_control["backup_reserve"] > 100
             ):
@@ -310,8 +279,9 @@ class StorageChargeLimit(SolarEdgeNumberBase):
         try:
             if (
                 self._platform.decoded_storage_control is False
-                or float_to_hex(self._platform.decoded_storage_control["charge_limit"])
-                == hex(SunSpecNotImpl.FLOAT32)
+                or is_float32_not_impl(
+                    self._platform.decoded_storage_control["charge_limit"]
+                )
                 or self._platform.decoded_storage_control["charge_limit"] < 0
             ):
                 return False
@@ -365,10 +335,9 @@ class StorageDischargeLimit(SolarEdgeNumberBase):
         try:
             if (
                 self._platform.decoded_storage_control is False
-                or float_to_hex(
+                or is_float32_not_impl(
                     self._platform.decoded_storage_control["discharge_limit"]
                 )
-                == hex(SunSpecNotImpl.FLOAT32)
                 or self._platform.decoded_storage_control["discharge_limit"] < 0
             ):
                 return False
@@ -420,9 +389,7 @@ class SolarEdgeSiteLimit(SolarEdgeNumberBase):
     @property
     def available(self) -> bool:
         try:
-            if float_to_hex(self._platform.decoded_model["E_Site_Limit"]) == hex(
-                SunSpecNotImpl.FLOAT32
-            ):
+            if is_float32_not_impl(self._platform.decoded_model["E_Site_Limit"]):
                 return False
 
             return super().available and (
@@ -472,8 +439,7 @@ class SolarEdgeExternalProductionMax(SolarEdgeNumberBase):
     def available(self) -> bool:
         try:
             if (
-                float_to_hex(self._platform.decoded_model["Ext_Prod_Max"])
-                == hex(SunSpecNotImpl.FLOAT32)
+                is_float32_not_impl(self._platform.decoded_model["Ext_Prod_Max"])
                 or self._platform.decoded_model["Ext_Prod_Max"] < 0
             ):
                 return False
@@ -585,8 +551,7 @@ class SolarEdgeCosPhiSet(SolarEdgeNumberBase):
     def available(self) -> bool:
         try:
             if (
-                float_to_hex(self._platform.decoded_model["I_CosPhi"])
-                == hex(SunSpecNotImpl.FLOAT32)
+                is_float32_not_impl(self._platform.decoded_model["I_CosPhi"])
                 or self._platform.decoded_model["I_CosPhi"] > 1.0
                 or self._platform.decoded_model["I_CosPhi"] < -1.0
             ):
@@ -639,8 +604,7 @@ class SolarEdgePowerReduce(SolarEdgeNumberBase):
     def available(self) -> bool:
         try:
             if (
-                float_to_hex(self._platform.decoded_model["PowerReduce"])
-                == hex(SunSpecNotImpl.FLOAT32)
+                is_float32_not_impl(self._platform.decoded_model["PowerReduce"])
                 or self._platform.decoded_model["PowerReduce"] > 100
                 or self._platform.decoded_model["PowerReduce"] < 0
             ):
@@ -692,8 +656,7 @@ class SolarEdgeCurrentLimit(SolarEdgeNumberBase):
     def available(self) -> bool:
         try:
             if (
-                float_to_hex(self._platform.decoded_model["MaxCurrent"])
-                == hex(SunSpecNotImpl.FLOAT32)
+                is_float32_not_impl(self._platform.decoded_model["MaxCurrent"])
                 or self._platform.decoded_model["MaxCurrent"] > 256
                 or self._platform.decoded_model["MaxCurrent"] < 0
             ):

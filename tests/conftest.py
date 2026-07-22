@@ -184,3 +184,21 @@ def create_io_exception_response():
     response = ModbusIOException("Test IO Exception")
     response.isError = MagicMock(return_value=True)
     return response
+
+
+def registers_from_values(*typed_values) -> list[int]:
+    """Build a register block from (value, DATATYPE) pairs.
+
+    Encodes each value with the same word order the hub uses to decode,
+    so tests exercise the real offset/datatype mapping instead of zeros.
+    """
+    from pymodbus.client.mixin import ModbusClientMixin
+
+    registers: list[int] = []
+    for value, data_type in typed_values:
+        registers.extend(
+            ModbusClientMixin.convert_to_registers(
+                value, data_type=data_type, word_order="little"
+            )
+        )
+    return registers

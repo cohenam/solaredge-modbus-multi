@@ -73,7 +73,8 @@
           "detect_batteries": "Auto-Detect Batteries",
           "detect_extras": "Auto-Detect Additional Entities",
           "advanced_power_control": "Power Control Options",
-          "sleep_after_write": "Inverter Command Delay (seconds)"
+          "sleep_after_write": "Inverter Command Delay (seconds)",
+          "slow_poll_multiplier": "Poll settings registers every Nth cycle"
         }
       },
       "adv_pwr_ctl": {
@@ -96,7 +97,8 @@
     "error": {
       "invalid_scan_interval": "Valid interval is 1 to 86400 seconds.",
       "invalid_sleep_interval": "Valid interval is 0 to 60 seconds.",
-      "invalid_percent": "Valid range is 0 to 100 percent."
+      "invalid_percent": "Valid range is 0 to 100 percent.",
+      "invalid_slow_poll_multiplier": "Slow poll multiplier must be between 1 and 60"
     }
   },
   "issues": {

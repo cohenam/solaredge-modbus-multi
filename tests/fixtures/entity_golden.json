@@ -1,0 +1,1532 @@
+[
+ {
+  "class": "ACCurrentSensor",
+  "unique_id": "se_inv_1_ac_current",
+  "name": "AC Current",
+  "device_class": "current",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "A",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACCurrentSensor",
+  "unique_id": "se_inv_1_ac_current_a",
+  "name": "AC Current A",
+  "device_class": "current",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "A",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACCurrentSensor",
+  "unique_id": "se_inv_1_ac_current_b",
+  "name": "AC Current B",
+  "device_class": "current",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "A",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACCurrentSensor",
+  "unique_id": "se_inv_1_ac_current_c",
+  "name": "AC Current C",
+  "device_class": "current",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "A",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACCurrentSensor",
+  "unique_id": "se_meter_1_ac_current",
+  "name": "AC Current",
+  "device_class": "current",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "A",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACCurrentSensor",
+  "unique_id": "se_meter_1_ac_current_a",
+  "name": "AC Current A",
+  "device_class": "current",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "A",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACCurrentSensor",
+  "unique_id": "se_meter_1_ac_current_b",
+  "name": "AC Current B",
+  "device_class": "current",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "A",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACCurrentSensor",
+  "unique_id": "se_meter_1_ac_current_c",
+  "name": "AC Current C",
+  "device_class": "current",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "A",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACFrequency",
+  "unique_id": "se_inv_1_ac_frequency",
+  "name": "AC Frequency",
+  "device_class": "frequency",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "Hz",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACFrequency",
+  "unique_id": "se_meter_1_ac_frequency",
+  "name": "AC Frequency",
+  "device_class": "frequency",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "Hz",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACPower",
+  "unique_id": "se_inv_1_ac_power",
+  "name": "AC Power",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": null,
+  "icon": "mdi:solar-power"
+ },
+ {
+  "class": "ACPower",
+  "unique_id": "se_meter_1_ac_power",
+  "name": "AC Power",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": null,
+  "icon": "mdi:solar-power"
+ },
+ {
+  "class": "ACPower",
+  "unique_id": "se_meter_1_ac_power_a",
+  "name": "AC Power A",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": null,
+  "icon": "mdi:solar-power"
+ },
+ {
+  "class": "ACPower",
+  "unique_id": "se_meter_1_ac_power_b",
+  "name": "AC Power B",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": null,
+  "icon": "mdi:solar-power"
+ },
+ {
+  "class": "ACPower",
+  "unique_id": "se_meter_1_ac_power_c",
+  "name": "AC Power C",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": null,
+  "icon": "mdi:solar-power"
+ },
+ {
+  "class": "ACPowerFactor",
+  "unique_id": "se_inv_1_ac_pf",
+  "name": "AC Power Factor",
+  "device_class": "power_factor",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "%",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACPowerFactor",
+  "unique_id": "se_meter_1_ac_pf",
+  "name": "AC Power Factor",
+  "device_class": "power_factor",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "%",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACPowerFactor",
+  "unique_id": "se_meter_1_ac_pf_a",
+  "name": "AC Power Factor A",
+  "device_class": "power_factor",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "%",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACPowerFactor",
+  "unique_id": "se_meter_1_ac_pf_b",
+  "name": "AC Power Factor B",
+  "device_class": "power_factor",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "%",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACPowerFactor",
+  "unique_id": "se_meter_1_ac_pf_c",
+  "name": "AC Power Factor C",
+  "device_class": "power_factor",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "%",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACPowerInverted",
+  "unique_id": "se_meter_1_ac_power_inverted",
+  "name": "AC Power Inverted",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": null,
+  "icon": "mdi:solar-power"
+ },
+ {
+  "class": "ACVoltAmp",
+  "unique_id": "se_inv_1_ac_va",
+  "name": "AC Apparent Power",
+  "device_class": "apparent_power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "VA",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACVoltAmp",
+  "unique_id": "se_meter_1_ac_va",
+  "name": "AC Apparent Power",
+  "device_class": "apparent_power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "VA",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACVoltAmp",
+  "unique_id": "se_meter_1_ac_va_a",
+  "name": "AC Apparent Power A",
+  "device_class": "apparent_power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "VA",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACVoltAmp",
+  "unique_id": "se_meter_1_ac_va_b",
+  "name": "AC Apparent Power B",
+  "device_class": "apparent_power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "VA",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACVoltAmp",
+  "unique_id": "se_meter_1_ac_va_c",
+  "name": "AC Apparent Power C",
+  "device_class": "apparent_power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "VA",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACVoltAmpReactive",
+  "unique_id": "se_inv_1_ac_var",
+  "name": "AC Reactive Power",
+  "device_class": "reactive_power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "var",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACVoltAmpReactive",
+  "unique_id": "se_meter_1_ac_var",
+  "name": "AC Reactive Power",
+  "device_class": "reactive_power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "var",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACVoltAmpReactive",
+  "unique_id": "se_meter_1_ac_var_a",
+  "name": "AC Reactive Power A",
+  "device_class": "reactive_power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "var",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACVoltAmpReactive",
+  "unique_id": "se_meter_1_ac_var_b",
+  "name": "AC Reactive Power B",
+  "device_class": "reactive_power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "var",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "ACVoltAmpReactive",
+  "unique_id": "se_meter_1_ac_var_c",
+  "name": "AC Reactive Power C",
+  "device_class": "reactive_power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "var",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "AdvPowerControlEnabled",
+  "unique_id": "se_inv_1_adv_pwr_ctrl_en",
+  "name": "Advanced Power Control",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "DCCurrent",
+  "unique_id": "se_inv_1_dc_current",
+  "name": "DC Current",
+  "device_class": "current",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "A",
+  "entity_category": null,
+  "icon": "mdi:current-dc"
+ },
+ {
+  "class": "DCPower",
+  "unique_id": "se_inv_1_dc_power",
+  "name": "DC Power",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": null,
+  "icon": "mdi:solar-power"
+ },
+ {
+  "class": "DCVoltage",
+  "unique_id": "se_inv_1_dc_voltage",
+  "name": "DC Voltage",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "GridStatusOnOff",
+  "unique_id": "se_inv_1_grid_status_on_off",
+  "name": "Grid Status",
+  "device_class": "power",
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower"
+ },
+ {
+  "class": "HeatSinkTemperature",
+  "unique_id": "se_inv_1_temp_sink",
+  "name": "Temperature",
+  "device_class": "temperature",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "\u00b0C",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "MeterEvents",
+  "unique_id": "se_meter_1_meter_events",
+  "name": "Meter Events",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "MeterVAhIE",
+  "unique_id": "se_meter_1_exported_a_vah",
+  "name": "Apparent Energy Exported A",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "VAh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "MeterVAhIE",
+  "unique_id": "se_meter_1_exported_b_vah",
+  "name": "Apparent Energy Exported B",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "VAh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "MeterVAhIE",
+  "unique_id": "se_meter_1_exported_c_vah",
+  "name": "Apparent Energy Exported C",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "VAh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "MeterVAhIE",
+  "unique_id": "se_meter_1_exported_vah",
+  "name": "Apparent Energy Exported",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "VAh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "MeterVAhIE",
+  "unique_id": "se_meter_1_imported_a_vah",
+  "name": "Apparent Energy Imported A",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "VAh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "MeterVAhIE",
+  "unique_id": "se_meter_1_imported_b_vah",
+  "name": "Apparent Energy Imported B",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "VAh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "MeterVAhIE",
+  "unique_id": "se_meter_1_imported_c_vah",
+  "name": "Apparent Energy Imported C",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "VAh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "MeterVAhIE",
+  "unique_id": "se_meter_1_imported_vah",
+  "name": "Apparent Energy Imported",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "VAh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_export_q3_a_varh",
+  "name": "Reactive Energy Export Q3 A",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_export_q3_b_varh",
+  "name": "Reactive Energy Export Q3 B",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_export_q3_c_varh",
+  "name": "Reactive Energy Export Q3 C",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_export_q3_varh",
+  "name": "Reactive Energy Export Q3",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_export_q4_a_varh",
+  "name": "Reactive Energy Export Q4 A",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_export_q4_b_varh",
+  "name": "Reactive Energy Export Q4 B",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_export_q4_c_varh",
+  "name": "Reactive Energy Export Q4 C",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_export_q4_varh",
+  "name": "Reactive Energy Export Q4",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_import_q1_a_varh",
+  "name": "Reactive Energy Import Q1 A",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_import_q1_b_varh",
+  "name": "Reactive Energy Import Q1 B",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_import_q1_c_varh",
+  "name": "Reactive Energy Import Q1 C",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_import_q1_varh",
+  "name": "Reactive Energy Import Q1",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_import_q2_a_varh",
+  "name": "Reactive Energy Import Q2 A",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_import_q2_b_varh",
+  "name": "Reactive Energy Import Q2 B",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_import_q2_c_varh",
+  "name": "Reactive Energy Import Q2 C",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "MetervarhIE",
+  "unique_id": "se_meter_1_import_q2_varh",
+  "name": "Reactive Energy Import Q2",
+  "device_class": null,
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "varh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "SolarEdgeACEnergy",
+  "unique_id": "se_inv_1_ac_energy_kwh",
+  "name": "AC Energy",
+  "device_class": "energy",
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeACEnergy",
+  "unique_id": "se_meter_1_exported_a_kwh",
+  "name": "AC Energy Exported A",
+  "device_class": "energy",
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "SolarEdgeACEnergy",
+  "unique_id": "se_meter_1_exported_b_kwh",
+  "name": "AC Energy Exported B",
+  "device_class": "energy",
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "SolarEdgeACEnergy",
+  "unique_id": "se_meter_1_exported_c_kwh",
+  "name": "AC Energy Exported C",
+  "device_class": "energy",
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "SolarEdgeACEnergy",
+  "unique_id": "se_meter_1_exported_kwh",
+  "name": "AC Energy Exported",
+  "device_class": "energy",
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-import"
+ },
+ {
+  "class": "SolarEdgeACEnergy",
+  "unique_id": "se_meter_1_imported_a_kwh",
+  "name": "AC Energy Imported A",
+  "device_class": "energy",
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "SolarEdgeACEnergy",
+  "unique_id": "se_meter_1_imported_b_kwh",
+  "name": "AC Energy Imported B",
+  "device_class": "energy",
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "SolarEdgeACEnergy",
+  "unique_id": "se_meter_1_imported_c_kwh",
+  "name": "AC Energy Imported C",
+  "device_class": "energy",
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "SolarEdgeACEnergy",
+  "unique_id": "se_meter_1_imported_kwh",
+  "name": "AC Energy Imported",
+  "device_class": "energy",
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": "mdi:transmission-tower-export"
+ },
+ {
+  "class": "SolarEdgeActivePowerLimit",
+  "unique_id": "se_inv_1_active_power_limit",
+  "name": "Active Power Limit",
+  "device_class": null,
+  "state_class": "measurement",
+  "native_unit_of_measurement": "%",
+  "entity_category": null,
+  "icon": "mdi:percent"
+ },
+ {
+  "class": "SolarEdgeActivePowerLimitSet",
+  "unique_id": "se_inv_1_active_power_limit_set",
+  "name": "Active Power Limit",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "%",
+  "entity_category": "config",
+  "icon": "mdi:percent"
+ },
+ {
+  "class": "SolarEdgeBatteryAvailableEnergy",
+  "unique_id": "se_batt_1_avail_energy",
+  "name": "Available Energy",
+  "device_class": "energy_storage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeBatteryAvgTemp",
+  "unique_id": "se_batt_1_avg_temp",
+  "name": "Average Temperature",
+  "device_class": "temperature",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "\u00b0C",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeBatteryCurrent",
+  "unique_id": "se_batt_1_dc_current",
+  "name": "DC Current",
+  "device_class": "current",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "A",
+  "entity_category": null,
+  "icon": "mdi:current-dc"
+ },
+ {
+  "class": "SolarEdgeBatteryEnergyExport",
+  "unique_id": "se_batt_1_energy_export",
+  "name": "Energy Export",
+  "device_class": "energy",
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": "mdi:battery-charging-20"
+ },
+ {
+  "class": "SolarEdgeBatteryEnergyImport",
+  "unique_id": "se_batt_1_energy_import",
+  "name": "Energy Import",
+  "device_class": "energy",
+  "state_class": "total_increasing",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": "mdi:battery-charging-100"
+ },
+ {
+  "class": "SolarEdgeBatteryMaxChargePeakPower",
+  "unique_id": "se_batt_1_max_charge_peak_power",
+  "name": "Peak Charge Power",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeBatteryMaxChargePower",
+  "unique_id": "se_batt_1_max_charge_power",
+  "name": "Max Charge Power",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeBatteryMaxDischargePeakPower",
+  "unique_id": "se_batt_1_max_discharge_peak_power",
+  "name": "Peak Discharge Power",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeBatteryMaxDischargePower",
+  "unique_id": "se_batt_1_max_discharge_power",
+  "name": "Max Discharge Power",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeBatteryMaxEnergy",
+  "unique_id": "se_batt_1_max_energy",
+  "name": "Maximum Energy",
+  "device_class": "energy_storage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "Wh",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeBatteryMaxTemp",
+  "unique_id": "se_batt_1_max_temp",
+  "name": "Max Temperature",
+  "device_class": "temperature",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "\u00b0C",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeBatteryPower",
+  "unique_id": "se_batt_1_dc_power",
+  "name": "DC Power",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": null,
+  "icon": "mdi:lightning-bolt"
+ },
+ {
+  "class": "SolarEdgeBatteryPowerInverted",
+  "unique_id": "se_batt_1_dc_power_inverted",
+  "name": "DC Power Inverted",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": null,
+  "icon": "mdi:lightning-bolt"
+ },
+ {
+  "class": "SolarEdgeBatterySOE",
+  "unique_id": "se_batt_1_battery_soe",
+  "name": "State of Energy",
+  "device_class": "battery",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "%",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeBatterySOH",
+  "unique_id": "se_batt_1_battery_soh",
+  "name": "State of Health",
+  "device_class": null,
+  "state_class": "measurement",
+  "native_unit_of_measurement": "%",
+  "entity_category": "diagnostic",
+  "icon": "mdi:battery-heart-outline"
+ },
+ {
+  "class": "SolarEdgeBatteryStatus",
+  "unique_id": "se_batt_1_status",
+  "name": "Status",
+  "device_class": "enum",
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeBatteryVoltage",
+  "unique_id": "se_batt_1_dc_voltage",
+  "name": "DC Voltage",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeCommitControlSettings",
+  "unique_id": "se_inv_1_commit_pwr_settings",
+  "name": "Commit Power Settings",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": "mdi:content-save-cog-outline"
+ },
+ {
+  "class": "SolarEdgeCommitControlSettings",
+  "unique_id": "se_inv_1bt_commit_pwr_settings",
+  "name": "Commit Power Settings",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": "mdi:content-save-cog-outline"
+ },
+ {
+  "class": "SolarEdgeCosPhi",
+  "unique_id": "se_inv_1_cosphi",
+  "name": "CosPhi",
+  "device_class": null,
+  "state_class": "measurement",
+  "native_unit_of_measurement": null,
+  "entity_category": null,
+  "icon": "mdi:angle-acute"
+ },
+ {
+  "class": "SolarEdgeCosPhiSet",
+  "unique_id": "se_inv_1_cosphi_set",
+  "name": "CosPhi",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": null,
+  "entity_category": "config",
+  "icon": "mdi:angle-acute"
+ },
+ {
+  "class": "SolarEdgeCurrentLimit",
+  "unique_id": "se_inv_1_max_current",
+  "name": "Current Limit",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "A",
+  "entity_category": "config",
+  "icon": "mdi:current-ac"
+ },
+ {
+  "class": "SolarEdgeDCCurrentMMPPT",
+  "unique_id": "se_inv_1_dc_current_mmppt0",
+  "name": "DC Current",
+  "device_class": "current",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "A",
+  "entity_category": null,
+  "icon": "mdi:current-dc"
+ },
+ {
+  "class": "SolarEdgeDCCurrentMMPPT",
+  "unique_id": "se_inv_1_dc_current_mmppt1",
+  "name": "DC Current",
+  "device_class": "current",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "A",
+  "entity_category": null,
+  "icon": "mdi:current-dc"
+ },
+ {
+  "class": "SolarEdgeDCPowerMMPPT",
+  "unique_id": "se_inv_1_dc_power_mmppt0",
+  "name": "DC Power",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": null,
+  "icon": "mdi:solar-power"
+ },
+ {
+  "class": "SolarEdgeDCPowerMMPPT",
+  "unique_id": "se_inv_1_dc_power_mmppt1",
+  "name": "DC Power",
+  "device_class": "power",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "W",
+  "entity_category": null,
+  "icon": "mdi:solar-power"
+ },
+ {
+  "class": "SolarEdgeDCVoltageMMPPT",
+  "unique_id": "se_inv_1_dc_voltage_mmppt0",
+  "name": "DC Voltage",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeDCVoltageMMPPT",
+  "unique_id": "se_inv_1_dc_voltage_mmppt1",
+  "name": "DC Voltage",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeDefaultControlSettings",
+  "unique_id": "se_inv_1_default_pwr_settings",
+  "name": "Default Power Settings",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": "mdi:restore-alert"
+ },
+ {
+  "class": "SolarEdgeDefaultControlSettings",
+  "unique_id": "se_inv_1bt_default_pwr_settings",
+  "name": "Default Power Settings",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": "mdi:restore-alert"
+ },
+ {
+  "class": "SolarEdgeDevice",
+  "unique_id": "se_batt_1_device",
+  "name": "Device",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeDevice",
+  "unique_id": "se_inv_1_device",
+  "name": "Device",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeDevice",
+  "unique_id": "se_meter_1_device",
+  "name": "Device",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeExternalProduction",
+  "unique_id": "se_inv_1_external_production",
+  "name": "External Production",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeExternalProductionMax",
+  "unique_id": "se_inv_1_external_production_max",
+  "name": "External Production Max",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "W",
+  "entity_category": "config",
+  "icon": "mdi:lightning-bolt"
+ },
+ {
+  "class": "SolarEdgeGridControl",
+  "unique_id": "se_inv_1_adv_pwr_ctrl",
+  "name": "Advanced Power Control",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeInverterStatus",
+  "unique_id": "se_inv_1_status",
+  "name": "Status",
+  "device_class": "enum",
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeLastUpdate",
+  "unique_id": "se_batt_1_last_update_timestamp",
+  "name": "Last Update",
+  "device_class": "timestamp",
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeLastUpdate",
+  "unique_id": "se_inv_1_last_update_timestamp",
+  "name": "Last Update",
+  "device_class": "timestamp",
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeLastUpdate",
+  "unique_id": "se_meter_1_last_update_timestamp",
+  "name": "Last Update",
+  "device_class": "timestamp",
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeMMPPTEvents",
+  "unique_id": "se_inv_1_mmppt_events",
+  "name": "MMPPT Events",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeNegativeSiteLimit",
+  "unique_id": "se_inv_1_negative_site_limit",
+  "name": "Negative Site Limit",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgePowerReduce",
+  "unique_id": "se_inv_1_power_reduce",
+  "name": "Power Reduce",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "%",
+  "entity_category": "config",
+  "icon": "mdi:percent"
+ },
+ {
+  "class": "SolarEdgeRRCR",
+  "unique_id": "se_inv_1_rrcr",
+  "name": "RRCR Status",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeReactivePowerMode",
+  "unique_id": "se_inv_1_reactive_power_mode",
+  "name": "Reactive Power Mode",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeRefreshButton",
+  "unique_id": "se_inv_1_refresh",
+  "name": "Refresh",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": "mdi:refresh"
+ },
+ {
+  "class": "SolarEdgeSiteLimit",
+  "unique_id": "se_inv_1_site_limit",
+  "name": "Site Limit",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "W",
+  "entity_category": "config",
+  "icon": "mdi:lightning-bolt"
+ },
+ {
+  "class": "SolarEdgeTemperatureMMPPT",
+  "unique_id": "se_inv_1_tmp_mmppt0",
+  "name": "Temperature",
+  "device_class": "temperature",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "\u00b0C",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "SolarEdgeTemperatureMMPPT",
+  "unique_id": "se_inv_1_tmp_mmppt1",
+  "name": "Temperature",
+  "device_class": "temperature",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "\u00b0C",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "SolaredgeLimitControl",
+  "unique_id": "se_inv_1_limit_control",
+  "name": "Limit Control",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": null
+ },
+ {
+  "class": "SolaredgeLimitControlMode",
+  "unique_id": "se_inv_1_limit_control_mode",
+  "name": "Limit Control Mode",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": null
+ },
+ {
+  "class": "StatusVendor",
+  "unique_id": "se_inv_1_status_vendor",
+  "name": "Status Vendor",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "StatusVendor4",
+  "unique_id": "se_inv_1_status_vendor4",
+  "name": "Status Vendor 4",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "StorageACChargeLimit",
+  "unique_id": "se_inv_1_storage_ac_charge_limit",
+  "name": "AC Charge Limit",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!KeyError",
+  "entity_category": "config",
+  "icon": "mdi:lightning-bolt"
+ },
+ {
+  "class": "StorageACChargePolicy",
+  "unique_id": "se_inv_1_ac_charge_policy",
+  "name": "AC Charge Policy",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": null
+ },
+ {
+  "class": "StorageBackupReserve",
+  "unique_id": "se_inv_1_storage_backup_reserve",
+  "name": "Backup Reserve",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "%",
+  "entity_category": "config",
+  "icon": "mdi:battery-positive"
+ },
+ {
+  "class": "StorageChargeLimit",
+  "unique_id": "se_inv_1_storage_charge_limit",
+  "name": "Storage Charge Limit",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "W",
+  "entity_category": "config",
+  "icon": "mdi:lightning-bolt"
+ },
+ {
+  "class": "StorageCommandMode",
+  "unique_id": "se_inv_1_storage_command_mode",
+  "name": "Storage Command Mode",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": null
+ },
+ {
+  "class": "StorageCommandTimeout",
+  "unique_id": "se_inv_1_storage_command_timeout",
+  "name": "Storage Command Timeout",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "s",
+  "entity_category": "config",
+  "icon": "mdi:clock-end"
+ },
+ {
+  "class": "StorageControlMode",
+  "unique_id": "se_inv_1_storage_control_mode",
+  "name": "Storage Control Mode",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": null
+ },
+ {
+  "class": "StorageDefaultMode",
+  "unique_id": "se_inv_1_storage_default_mode",
+  "name": "Storage Default Mode",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "!AttributeError",
+  "entity_category": "config",
+  "icon": null
+ },
+ {
+  "class": "StorageDischargeLimit",
+  "unique_id": "se_inv_1_storage_discharge_limit",
+  "name": "Storage Discharge Limit",
+  "device_class": null,
+  "state_class": "!AttributeError",
+  "native_unit_of_measurement": "W",
+  "entity_category": "config",
+  "icon": "mdi:lightning-bolt"
+ },
+ {
+  "class": "Version",
+  "unique_id": "se_batt_1_version",
+  "name": "Version",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "Version",
+  "unique_id": "se_evse_1_version",
+  "name": "Version",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "Version",
+  "unique_id": "se_inv_1_version",
+  "name": "Version",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "Version",
+  "unique_id": "se_meter_1_version",
+  "name": "Version",
+  "device_class": null,
+  "state_class": null,
+  "native_unit_of_measurement": null,
+  "entity_category": "diagnostic",
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_inv_1_ac_voltage_ab",
+  "name": "AC Voltage AB",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_inv_1_ac_voltage_an",
+  "name": "AC Voltage AN",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_inv_1_ac_voltage_bc",
+  "name": "AC Voltage BC",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_inv_1_ac_voltage_bn",
+  "name": "AC Voltage BN",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_inv_1_ac_voltage_ca",
+  "name": "AC Voltage CA",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_inv_1_ac_voltage_cn",
+  "name": "AC Voltage CN",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_meter_1_ac_voltage_ab",
+  "name": "AC Voltage AB",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_meter_1_ac_voltage_an",
+  "name": "AC Voltage AN",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_meter_1_ac_voltage_bc",
+  "name": "AC Voltage BC",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_meter_1_ac_voltage_bn",
+  "name": "AC Voltage BN",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_meter_1_ac_voltage_ca",
+  "name": "AC Voltage CA",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_meter_1_ac_voltage_cn",
+  "name": "AC Voltage CN",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_meter_1_ac_voltage_ll",
+  "name": "AC Voltage LL",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ },
+ {
+  "class": "VoltageSensor",
+  "unique_id": "se_meter_1_ac_voltage_ln",
+  "name": "AC Voltage LN",
+  "device_class": "voltage",
+  "state_class": "measurement",
+  "native_unit_of_measurement": "V",
+  "entity_category": null,
+  "icon": null
+ }
+]

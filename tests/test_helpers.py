@@ -221,7 +221,7 @@ class TestUpdateAccum:
         obj = MagicMock()
         obj.last = 100
 
-        with pytest.raises(ValueError, match="must be non-zero value"):
+        with pytest.raises(ValueError, match="accumulator has no value"):
             update_accum(obj, 0)
 
     def test_negative_value_raises_error(self):
@@ -229,7 +229,7 @@ class TestUpdateAccum:
         obj = MagicMock()
         obj.last = 100
 
-        with pytest.raises(ValueError, match="must be non-zero value"):
+        with pytest.raises(ValueError, match="accumulator has no value"):
             update_accum(obj, -50)
 
     def test_large_increment(self):
@@ -297,19 +297,8 @@ class TestHostValid:
         ],
     )
     def test_valid_ipv6_addresses(self, valid_ipv6):
-        """Test valid IPv6 addresses.
-
-        Note: Current implementation has a bug where IPv6 addresses
-        don't return True due to `== (4 or 6)` evaluating to `== 4`.
-        IPv6 addresses fall through to the hostname regex check which
-        returns None for addresses with colons.
-        This test documents the current behavior.
-        """
-        # IPv6 addresses will fail validation due to bug in line 54
-        # of helpers.py: `== (4 or 6)` evaluates to `== 4`
-        # They return None from the regex match, not True
-        result = host_valid(valid_ipv6)
-        assert result is None or result is False
+        """Test valid IPv6 addresses."""
+        assert host_valid(valid_ipv6) is True
 
     @pytest.mark.parametrize(
         "valid_hostname",

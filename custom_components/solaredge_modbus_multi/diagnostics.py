@@ -40,7 +40,7 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, config_entry: ConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
-    hub = hass.data[DOMAIN][config_entry.entry_id]["hub"]
+    hub = config_entry.runtime_data.hub
 
     data: dict[str, Any] = {
         "pymodbus_version": hub.pymodbus_version,

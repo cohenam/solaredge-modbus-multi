@@ -438,6 +438,8 @@ class SolaredgeModbusMultiOptionsFlowHandler(OptionsFlow):
                 errors[ConfName.SLEEP_AFTER_WRITE] = "invalid_sleep_interval"
             elif user_input[ConfName.SLEEP_AFTER_WRITE] > 60:
                 errors[ConfName.SLEEP_AFTER_WRITE] = "invalid_sleep_interval"
+            elif not 1 <= user_input[ConfName.SLOW_POLL_MULTIPLIER] <= 60:
+                errors[ConfName.SLOW_POLL_MULTIPLIER] = "invalid_slow_poll_multiplier"
             else:
                 if user_input[ConfName.DETECT_BATTERIES] is True:
                     self.init_info = user_input
@@ -473,6 +475,9 @@ class SolaredgeModbusMultiOptionsFlowHandler(OptionsFlow):
                 ConfName.SLEEP_AFTER_WRITE: self.config_entry.options.get(
                     ConfName.SLEEP_AFTER_WRITE, ConfDefaultInt.SLEEP_AFTER_WRITE
                 ),
+                ConfName.SLOW_POLL_MULTIPLIER: self.config_entry.options.get(
+                    ConfName.SLOW_POLL_MULTIPLIER, ConfDefaultInt.SLOW_POLL_MULTIPLIER
+                ),
             }
 
         return self.async_show_form(
@@ -506,6 +511,10 @@ class SolaredgeModbusMultiOptionsFlowHandler(OptionsFlow):
                     vol.Optional(
                         f"{ConfName.SLEEP_AFTER_WRITE}",
                         default=user_input[ConfName.SLEEP_AFTER_WRITE],
+                    ): vol.Coerce(int),
+                    vol.Optional(
+                        f"{ConfName.SLOW_POLL_MULTIPLIER}",
+                        default=user_input[ConfName.SLOW_POLL_MULTIPLIER],
                     ): vol.Coerce(int),
                 },
             ),

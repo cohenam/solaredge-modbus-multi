@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -83,14 +84,9 @@ class TestAsyncSetupEntry:
         inverter.advanced_power_control = False
         mock_hub.inverters = [inverter]
 
-        hass.data = {
-            "solaredge_modbus_multi": {
-                "test_entry_123": {
-                    "hub": mock_hub,
-                    "coordinator": mock_coordinator,
-                }
-            }
-        }
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=mock_coordinator
+        )
 
         async_add_entities = MagicMock()
 
@@ -112,14 +108,9 @@ class TestAsyncSetupEntry:
         inverter.advanced_power_control = True
         mock_hub.inverters = [inverter]
 
-        hass.data = {
-            "solaredge_modbus_multi": {
-                "test_entry_123": {
-                    "hub": mock_hub,
-                    "coordinator": mock_coordinator,
-                }
-            }
-        }
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=mock_coordinator
+        )
 
         async_add_entities = MagicMock()
 
@@ -143,14 +134,9 @@ class TestAsyncSetupEntry:
         mock_hub.option_site_limit_control = False
         mock_hub.inverters = [inverter]
 
-        hass.data = {
-            "solaredge_modbus_multi": {
-                "test_entry_123": {
-                    "hub": mock_hub,
-                    "coordinator": mock_coordinator,
-                }
-            }
-        }
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=mock_coordinator
+        )
 
         async_add_entities = MagicMock()
 
@@ -172,14 +158,9 @@ class TestAsyncSetupEntry:
         mock_hub.option_detect_extras = False
         mock_hub.inverters = [inverter]
 
-        hass.data = {
-            "solaredge_modbus_multi": {
-                "test_entry_123": {
-                    "hub": mock_hub,
-                    "coordinator": mock_coordinator,
-                }
-            }
-        }
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=mock_coordinator
+        )
 
         async_add_entities = MagicMock()
 

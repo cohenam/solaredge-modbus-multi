@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,7 +17,6 @@ from homeassistant.core import HomeAssistant
 from pymodbus.client.mixin import ModbusClientMixin
 
 from custom_components.solaredge_modbus_multi.const import (
-    DOMAIN,
     BatteryLimit,
     SunSpecNotImpl,
 )
@@ -1409,9 +1409,7 @@ class TestAsyncSetupEntry:
 
         coordinator = MagicMock()
 
-        hass.data = {
-            DOMAIN: {config_entry.entry_id: {"hub": hub, "coordinator": coordinator}}
-        }
+        config_entry.runtime_data = SimpleNamespace(hub=hub, coordinator=coordinator)
 
         await async_setup_entry(hass, config_entry, async_add_entities)
 
@@ -1443,9 +1441,7 @@ class TestAsyncSetupEntry:
 
         coordinator = MagicMock()
 
-        hass.data = {
-            DOMAIN: {config_entry.entry_id: {"hub": hub, "coordinator": coordinator}}
-        }
+        config_entry.runtime_data = SimpleNamespace(hub=hub, coordinator=coordinator)
 
         await async_setup_entry(hass, config_entry, async_add_entities)
 
@@ -1472,9 +1468,7 @@ class TestAsyncSetupEntry:
 
         coordinator = MagicMock()
 
-        hass.data = {
-            DOMAIN: {config_entry.entry_id: {"hub": hub, "coordinator": coordinator}}
-        }
+        config_entry.runtime_data = SimpleNamespace(hub=hub, coordinator=coordinator)
 
         await async_setup_entry(hass, config_entry, async_add_entities)
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -277,7 +278,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -294,7 +297,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {"host": "192.168.1.100"}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -322,7 +327,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -356,7 +363,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -394,7 +403,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -417,7 +428,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -445,7 +458,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -471,7 +486,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -500,7 +517,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -534,7 +553,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -570,7 +591,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -608,7 +631,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -639,7 +664,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -663,7 +690,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -686,7 +715,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
@@ -707,7 +738,9 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Setup hass data
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = yaml_config
-        hass.data[DOMAIN][mock_config_entry.entry_id] = {"hub": mock_hub}
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=MagicMock()
+        )
 
         result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 

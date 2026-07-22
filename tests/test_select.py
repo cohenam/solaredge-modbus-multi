@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -133,15 +134,10 @@ class TestAsyncSetupEntry:
         def capture_entities(entities):
             added_entities.extend(entities)
 
-        with patch.dict(
-            hass.data,
-            {
-                "solaredge_modbus_multi": {
-                    "test_entry": {"hub": mock_hub, "coordinator": mock_coordinator}
-                }
-            },
-        ):
-            await async_setup_entry(hass, mock_config_entry, capture_entities)
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=mock_coordinator
+        )
+        await async_setup_entry(hass, mock_config_entry, capture_entities)
 
         # Should have 4 storage control entities + 2 limit control + 1 reactive power
         assert len(added_entities) == 7
@@ -173,15 +169,10 @@ class TestAsyncSetupEntry:
         def capture_entities(entities):
             added_entities.extend(entities)
 
-        with patch.dict(
-            hass.data,
-            {
-                "solaredge_modbus_multi": {
-                    "test_entry": {"hub": mock_hub, "coordinator": mock_coordinator}
-                }
-            },
-        ):
-            await async_setup_entry(hass, mock_config_entry, capture_entities)
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=mock_coordinator
+        )
+        await async_setup_entry(hass, mock_config_entry, capture_entities)
 
         # Should not add any entities
         assert len(added_entities) == 0
@@ -202,15 +193,10 @@ class TestAsyncSetupEntry:
         def capture_entities(entities):
             added_entities.extend(entities)
 
-        with patch.dict(
-            hass.data,
-            {
-                "solaredge_modbus_multi": {
-                    "test_entry": {"hub": mock_hub, "coordinator": mock_coordinator}
-                }
-            },
-        ):
-            await async_setup_entry(hass, mock_config_entry, capture_entities)
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=mock_coordinator
+        )
+        await async_setup_entry(hass, mock_config_entry, capture_entities)
 
         # Should have only limit control and reactive power entities
         assert len(added_entities) == 3
@@ -880,8 +866,7 @@ class TestSolaredgeLimitControlMode:
         select = SolaredgeLimitControlMode(
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
-        # Note: Implementation returns None instead of False for this case
-        assert select.available is None
+        assert select.available is False
 
     def test_unavailable_with_missing_key(
         self, mock_inverter_platform, mock_config_entry, mock_coordinator

@@ -393,13 +393,7 @@ class TestCheckConfigurationRepairFlow:
     async def test_async_step_confirm_valid_ipv6(
         self, hass: HomeAssistant, repair_flow: CheckConfigurationRepairFlow
     ) -> None:
-        """Test confirm step with valid IPv6 address.
-
-        Note: Due to a bug in host_valid() where it checks
-        `ip.version == (4 or 6)` which evaluates to `ip.version == 4`,
-        IPv6 addresses are incorrectly rejected. This test documents
-        the current (buggy) behavior.
-        """
+        """Test confirm step with valid IPv6 address."""
         repair_flow.hass = hass
 
         user_input = {
@@ -408,12 +402,10 @@ class TestCheckConfigurationRepairFlow:
             ConfName.DEVICE_LIST: "1",
         }
 
-        result = await repair_flow.async_step_confirm(user_input=user_input)
+        with patch.object(hass.config_entries, "async_update_entry"):
+            result = await repair_flow.async_step_confirm(user_input=user_input)
 
-        # Currently fails validation due to host_valid() bug
-        assert result["type"] == "form"
-        assert CONF_HOST in result["errors"]
-        assert result["errors"][CONF_HOST] == "invalid_host"
+        assert result["type"] == "create_entry"
 
     async def test_async_step_confirm_device_range(
         self, hass: HomeAssistant, repair_flow: CheckConfigurationRepairFlow
