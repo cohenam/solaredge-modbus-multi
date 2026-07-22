@@ -243,3 +243,45 @@ class TestSfPrecision:
 
     def test_range_sanity(self):
         assert -32768 not in SUNSPEC_SF_RANGE
+
+
+async def test_evse_transport_failure_raises_modbus_read_error(mock_hub) -> None:
+    """EVSE no-response is a transport failure, not an invalid device."""
+    from custom_components.solaredge_modbus_multi.hub import (
+        ModbusIOError,
+        SolarEdgeEVSE,
+    )
+
+    hub = MagicMock()
+    hub.modbus_read_holding_registers = AsyncMock(
+        side_effect=ModbusIOError("no response")
+    )
+    evse = SolarEdgeEVSE(device_id=1, hub=hub)
+
+    with pytest.raises(ModbusReadError):
+        await evse.init_device()
+
+
+async def test_evse_invalid_device_is_skipped(mock_hub) -> None:
+    """A genuinely invalid EVSE is skipped; setup completes without it."""
+    from custom_components.solaredge_modbus_multi.hub import DeviceInvalid
+
+    with (
+        patch.object(
+            SolarEdgeInverter, "init_device", side_effect=DeviceIsEVSE("EVSE")
+        ),
+        patch(
+            "custom_components.solaredge_modbus_multi.hub.SolarEdgeEVSE"
+        ) as mock_evse_cls,
+        patch.object(mock_hub, "connect", new=AsyncMock()),
+        patch.object(mock_hub, "disconnect", new=AsyncMock()),
+    ):
+        mock_evse_cls.return_value.init_device = AsyncMock(
+            side_effect=DeviceInvalid("ID 1 is not SunSpec.")
+        )
+        mock_hub._client = MagicMock()
+
+        await mock_hub._async_init_solaredge()
+
+    assert mock_hub.evses == []
+    assert mock_hub.initalized is True

@@ -63,6 +63,125 @@ def log_decoded(prefix: str, decoded: dict) -> None:
         _LOGGER.debug(f"{prefix}: {name} {display_value} {type(value)}")
 
 
+# Field names decoded from each optional register block. Also used to
+# drop stale values when a block becomes unavailable (tiered polling
+# retains decoded_model values between slow poll cycles).
+GPC_DECODED_KEYS = ("I_RRCR", "I_Power_Limit", "I_CosPhi")
+SITE_LIMIT_DECODED_KEYS = (
+    "E_Lim_Ctl_Mode",
+    "E_Lim_Ctl",
+    "E_Site_Limit",
+    "Ext_Prod_Max",
+)
+GRID_STATUS_DECODED_KEYS = ("I_Grid_Status",)
+APC_INT32_FIELDS = [
+    "PwrFrqDeratingConfig",
+    "ReactivePwrConfig",
+    "ActivePwrGrad",
+    "AdvPwrCtrlEn",
+    "FrtEn",
+]
+APC_BLOCK1_FLOAT32_FIELDS = [
+    "FixedCosPhiPhase",
+    "FixedReactPwr",
+    "ReactCosPhiVsPX_0",
+    "ReactCosPhiVsPX_1",
+    "ReactCosPhiVsPX_2",
+    "ReactCosPhiVsPX_3",
+    "ReactCosPhiVsPX_4",
+    "ReactCosPhiVsPX_5",
+    "ReactCosPhiVsPY_0",
+    "ReactCosPhiVsPY_1",
+    "ReactCosPhiVsPY_2",
+    "ReactCosPhiVsPY_3",
+    "ReactCosPhiVsPY_4",
+    "ReactCosPhiVsPY_5",
+    "ReactQVsVgX_0",
+    "ReactQVsVgX_1",
+    "ReactQVsVgX_2",
+    "ReactQVsVgX_3",
+    "ReactQVsVgX_4",
+    "ReactQVsVgX_5",
+    "ReactQVsVgY_0",
+    "ReactQVsVgY_1",
+    "ReactQVsVgY_2",
+    "ReactQVsVgY_3",
+    "ReactQVsVgY_4",
+    "ReactQVsVgY_5",
+    "FRT_KFactor",
+    "PowerReduce",
+    "MaxWakeupFreq",
+    "MinWakeupFreq",
+    "MaxWakeupVg",
+    "MinWakeupVg",
+    "Vnom",
+    "Inom",
+    "PwrVsFreqX_0",
+    "PwrVsFreqX_1",
+]
+APC_BLOCK2_FLOAT32_FIELDS = [
+    "PwrVsFreqY_0",
+    "PwrVsFreqY_1",
+    "ResetFreq",
+    "MaxFreq",
+    "ReactQVsPX_0",
+    "ReactQVsPX_1",
+    "ReactQVsPX_2",
+    "ReactQVsPX_3",
+    "ReactQVsPX_4",
+    "ReactQVsPX_5",
+    "ReactQVsPY_0",
+    "ReactQVsPY_1",
+    "ReactQVsPY_2",
+    "ReactQVsPY_3",
+    "ReactQVsPY_4",
+    "ReactQVsPY_5",
+    "ReactCosPhiVsPVgLockInMax",
+    "ReactCosPhiVsPVgLockInMin",
+    "ReactCosPhiVsPVgLockOutMax",
+    "ReactCosPhiVsPVgLockOutMin",
+    "ReactQVsVgPLockInMax",
+    "ReactQVsVgPLockInMin",
+    "ReactQVsVgPLockOutMax",
+    "ReactQVsVgPLockOutMin",
+    "MaxCurrent",
+    "PwrVsVgX_0",
+    "PwrVsVgX_1",
+    "PwrVsVgX_2",
+    "PwrVsVgX_3",
+    "PwrVsVgX_4",
+    "PwrVsVgX_5",
+    "PwrVsVgY_0",
+    "PwrVsVgY_1",
+    "PwrVsVgY_2",
+    "PwrVsVgY_3",
+    "PwrVsVgY_4",
+    "PwrVsVgY_5",
+    "DisconnectAtZeroPwrLim",
+]
+APC_UINT32_FIELDS = [
+    "PwrFrqDeratingResetTime",
+    "PwrFrqDeratingGradTime",
+    "ReactQVsVgType",
+    "PwrSoftStartTime",
+]
+APC_DECODED_KEYS = (
+    "CommitPwrCtlSettings",
+    "RestorePwrCtlDefaults",
+    "ReactPwrIterTime",
+    *APC_INT32_FIELDS,
+    *APC_BLOCK1_FLOAT32_FIELDS,
+    *APC_BLOCK2_FLOAT32_FIELDS,
+    *APC_UINT32_FIELDS,
+)
+
+
+def drop_decoded(decoded: dict, keys) -> None:
+    """Remove block values so their entities go unavailable, not stale."""
+    for key in keys:
+        decoded.pop(key, None)
+
+
 pymodbus_version = importlib.metadata.version("pymodbus")
 
 
@@ -498,11 +617,13 @@ class SolarEdgeModbusMultiHub:
 
         self.online = True
 
-        self._poll_cycle += 1
+        # Decide the tier for this attempt, but only commit the cycle state
+        # after a successful poll: a failed attempt must not consume a due
+        # (or write-forced) slow poll.
+        next_cycle = self._poll_cycle + 1
         self.slow_poll_due = (
-            self._force_slow_poll or self._poll_cycle % self._slow_poll_multiplier == 0
+            self._force_slow_poll or next_cycle % self._slow_poll_multiplier == 0
         )
-        self._force_slow_poll = False
 
         try:
             async with asyncio.timeout(self.coordinator_timeout):
@@ -544,6 +665,9 @@ class SolarEdgeModbusMultiHub:
                 raise TimeoutError
 
             raise DataUpdateFailed(f"Timeout error: {e}")
+
+        self._poll_cycle = next_cycle
+        self._force_slow_poll = False
 
         if self._timeout_counter > 0:
             _LOGGER.debug(
@@ -1447,6 +1571,7 @@ class SolarEdgeInverter:
 
             except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
                 self.global_power_control = False
+                drop_decoded(self.decoded_model, GPC_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: global power control NOT available"
                 )
@@ -1461,6 +1586,7 @@ class SolarEdgeInverter:
                     translation_key="detect_timeout_gpc",
                     data={"entry_id": self.hub._entry_id},
                 )
+                drop_decoded(self.decoded_model, GPC_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: The inverter did not respond while "
                     "reading data for Global Dynamic Power Controls. These entities "
@@ -1492,13 +1618,7 @@ class SolarEdgeInverter:
                         unit=self.inverter_unit_id, address=61696, rcount=86
                     )
 
-                    int32_fields = [
-                        "PwrFrqDeratingConfig",
-                        "ReactivePwrConfig",
-                        "ActivePwrGrad",
-                        "AdvPwrCtrlEn",
-                        "FrtEn",
-                    ]
+                    int32_fields = APC_INT32_FIELDS
                     int32_data = (
                         inverter_data.registers[2:6]
                         + inverter_data.registers[8:10]
@@ -1518,44 +1638,7 @@ class SolarEdgeInverter:
                         )
                     )
 
-                    float32_fields = [
-                        "FixedCosPhiPhase",
-                        "FixedReactPwr",
-                        "ReactCosPhiVsPX_0",
-                        "ReactCosPhiVsPX_1",
-                        "ReactCosPhiVsPX_2",
-                        "ReactCosPhiVsPX_3",
-                        "ReactCosPhiVsPX_4",
-                        "ReactCosPhiVsPX_5",
-                        "ReactCosPhiVsPY_0",
-                        "ReactCosPhiVsPY_1",
-                        "ReactCosPhiVsPY_2",
-                        "ReactCosPhiVsPY_3",
-                        "ReactCosPhiVsPY_4",
-                        "ReactCosPhiVsPY_5",
-                        "ReactQVsVgX_0",
-                        "ReactQVsVgX_1",
-                        "ReactQVsVgX_2",
-                        "ReactQVsVgX_3",
-                        "ReactQVsVgX_4",
-                        "ReactQVsVgX_5",
-                        "ReactQVsVgY_0",
-                        "ReactQVsVgY_1",
-                        "ReactQVsVgY_2",
-                        "ReactQVsVgY_3",
-                        "ReactQVsVgY_4",
-                        "ReactQVsVgY_5",
-                        "FRT_KFactor",
-                        "PowerReduce",
-                        "MaxWakeupFreq",
-                        "MinWakeupFreq",
-                        "MaxWakeupVg",
-                        "MinWakeupVg",
-                        "Vnom",
-                        "Inom",
-                        "PwrVsFreqX_0",
-                        "PwrVsFreqX_1",
-                    ]
+                    float32_fields = APC_BLOCK1_FLOAT32_FIELDS
                     float32_data = (
                         inverter_data.registers[10:66] + inverter_data.registers[70:86]
                     )
@@ -1598,46 +1681,7 @@ class SolarEdgeInverter:
                         unit=self.inverter_unit_id, address=61782, rcount=84
                     )
 
-                    float32_fields = [
-                        "PwrVsFreqY_0",
-                        "PwrVsFreqY_1",
-                        "ResetFreq",
-                        "MaxFreq",
-                        "ReactQVsPX_0",
-                        "ReactQVsPX_1",
-                        "ReactQVsPX_2",
-                        "ReactQVsPX_3",
-                        "ReactQVsPX_4",
-                        "ReactQVsPX_5",
-                        "ReactQVsPY_0",
-                        "ReactQVsPY_1",
-                        "ReactQVsPY_2",
-                        "ReactQVsPY_3",
-                        "ReactQVsPY_4",
-                        "ReactQVsPY_5",
-                        "ReactCosPhiVsPVgLockInMax",
-                        "ReactCosPhiVsPVgLockInMin",
-                        "ReactCosPhiVsPVgLockOutMax",
-                        "ReactCosPhiVsPVgLockOutMin",
-                        "ReactQVsVgPLockInMax",
-                        "ReactQVsVgPLockInMin",
-                        "ReactQVsVgPLockOutMax",
-                        "ReactQVsVgPLockOutMin",
-                        "MaxCurrent",
-                        "PwrVsVgX_0",
-                        "PwrVsVgX_1",
-                        "PwrVsVgX_2",
-                        "PwrVsVgX_3",
-                        "PwrVsVgX_4",
-                        "PwrVsVgX_5",
-                        "PwrVsVgY_0",
-                        "PwrVsVgY_1",
-                        "PwrVsVgY_2",
-                        "PwrVsVgY_3",
-                        "PwrVsVgY_4",
-                        "PwrVsVgY_5",
-                        "DisconnectAtZeroPwrLim",
-                    ]
+                    float32_fields = APC_BLOCK2_FLOAT32_FIELDS
                     float32_data = (
                         inverter_data.registers[0:32]
                         + inverter_data.registers[36:52]
@@ -1657,12 +1701,7 @@ class SolarEdgeInverter:
                         )
                     )
 
-                    uint32_fields = [
-                        "PwrFrqDeratingResetTime",
-                        "PwrFrqDeratingGradTime",
-                        "ReactQVsVgType",
-                        "PwrSoftStartTime",
-                    ]
+                    uint32_fields = APC_UINT32_FIELDS
                     uint32_data = (
                         inverter_data.registers[32:36] + inverter_data.registers[52:56]
                     )
@@ -1684,6 +1723,7 @@ class SolarEdgeInverter:
 
             except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
                 self.advanced_power_control = False
+                drop_decoded(self.decoded_model, APC_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: advanced power control NOT available"
                 )
@@ -1698,6 +1738,7 @@ class SolarEdgeInverter:
                     translation_key="detect_timeout_apc",
                     data={"entry_id": self.hub._entry_id},
                 )
+                drop_decoded(self.decoded_model, APC_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: The inverter did not respond while "
                     "reading data for Advanced Power Controls. These entities "
@@ -1749,6 +1790,7 @@ class SolarEdgeInverter:
 
             except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
                 self.site_limit_control = False
+                drop_decoded(self.decoded_model, SITE_LIMIT_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: site limit control NOT available"
                 )
@@ -1807,9 +1849,11 @@ class SolarEdgeInverter:
 
             except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
                 self._grid_status = False
+                drop_decoded(self.decoded_model, GRID_STATUS_DECODED_KEYS)
                 _LOGGER.debug(f"I{self.inverter_unit_id}: Grid On/Off NOT available")
 
             except ModbusIOException as e:
+                drop_decoded(self.decoded_model, GRID_STATUS_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: A modbus I/O exception occurred "
                     "while reading data for Grid On/Off Status. This entity "
@@ -2731,7 +2775,9 @@ class SolarEdgeEVSE:
                 )
 
         except ModbusIOError:
-            raise DeviceInvalid(f"No response from evse ID {self.evse_unit_id}")
+            # Transport failure, not an invalid device: the device already
+            # answered the inverter probe, so surface this as retryable.
+            raise ModbusReadError(f"No response from evse ID {self.evse_unit_id}")
 
         except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
             raise DeviceInvalid(f"ID {self.evse_unit_id} is not SunSpec.")

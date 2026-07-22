@@ -167,3 +167,88 @@ async def test_multiplier_of_one_polls_everything(
     for _ in range(4):
         await hub.async_refresh_modbus_data()
         assert hub.slow_poll_due is True
+
+
+async def test_disabled_slow_block_drops_stale_values(
+    mock_hub, mock_modbus_client, mock_inverter_registers, mock_inverter_model_registers
+) -> None:
+    """A block that stops responding must drop its values, not keep them."""
+    seen: list[int] = []
+    mock_client = mock_modbus_client.return_value
+    side_effect = _recording_side_effect(
+        mock_inverter_registers, mock_inverter_model_registers, seen
+    )
+    mock_client.read_holding_registers.side_effect = side_effect
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await mock_hub.connect()
+        inverter = SolarEdgeInverter(device_id=1, hub=mock_hub)
+        await inverter.init_device()
+
+        mock_hub.slow_poll_due = True
+        await inverter.read_modbus_data()
+        assert "E_Site_Limit" in inverter.decoded_model
+        assert "AdvPwrCtrlEn" in inverter.decoded_model
+        assert "I_RRCR" in inverter.decoded_model
+
+        # Control blocks start failing on the next slow poll
+        def failing_side_effect(*args, **kwargs):
+            address = kwargs.get("address", args[0] if args else 0)
+            if address in SLOW_ADDRESSES:
+                return create_exception_response(ModbusExceptions.IllegalAddress)
+            return side_effect(*args, **kwargs)
+
+        mock_client.read_holding_registers.side_effect = failing_side_effect
+        mock_hub.slow_poll_due = True
+        await inverter.read_modbus_data()
+
+        assert inverter.site_limit_control is False
+        assert inverter.advanced_power_control is False
+        assert inverter.global_power_control is False
+        for key in ("E_Site_Limit", "E_Lim_Ctl_Mode", "E_Lim_Ctl", "Ext_Prod_Max"):
+            assert key not in inverter.decoded_model
+        assert "AdvPwrCtrlEn" not in inverter.decoded_model
+        assert "PwrFrqDeratingResetTime" not in inverter.decoded_model
+        assert "I_RRCR" not in inverter.decoded_model
+
+
+async def test_failed_poll_preserves_forced_slow_poll(mock_hub) -> None:
+    """A failed refresh must not consume a pending forced slow poll."""
+    from unittest.mock import AsyncMock
+
+    from custom_components.solaredge_modbus_multi.hub import (
+        DataUpdateFailed,
+        ModbusReadError,
+    )
+
+    mock_hub.initalized = True
+    mock_hub._keep_modbus_open = True
+    mock_hub._client = MagicMock()
+    mock_hub._client.connected = True
+
+    # Two successful cycles (0 and 1); cycle 2 would be off-cycle
+    await mock_hub.async_refresh_modbus_data()
+    await mock_hub.async_refresh_modbus_data()
+    cycle_before = mock_hub._poll_cycle
+
+    mock_hub._force_slow_poll = True
+
+    failing_inverter = MagicMock()
+    failing_inverter.read_modbus_data = AsyncMock(side_effect=ModbusReadError("boom"))
+    mock_hub.inverters = [failing_inverter]
+
+    with pytest.raises(DataUpdateFailed):
+        await mock_hub.async_refresh_modbus_data()
+
+    # Failure must not commit the cycle or consume the forced slow poll
+    assert mock_hub._force_slow_poll is True
+    assert mock_hub._poll_cycle == cycle_before
+
+    # Next (successful) refresh performs the forced slow poll
+    mock_hub.inverters = []
+    await mock_hub.async_refresh_modbus_data()
+    assert mock_hub.slow_poll_due is True
+    assert mock_hub._force_slow_poll is False
