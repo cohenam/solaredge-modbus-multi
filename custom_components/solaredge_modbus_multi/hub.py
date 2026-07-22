@@ -1095,13 +1095,15 @@ class SolarEdgeInverter:
                 unit=self.inverter_unit_id, address=40044, rcount=65
             )
 
-            # C_Version: registers[0:8] (address 40044-40051)
-            self.decoded_common["C_Version"] = int_list_to_string(
-                ModbusClientMixin.convert_from_registers(
-                    inverter_data.registers[0:8],
-                    data_type=ModbusClientMixin.DATATYPE.UINT16,
+            # C_Version: registers[0:8] (address 40044-40051). Static at runtime and
+            # already decoded in init_device — skip the per-cycle re-decode.
+            if "C_Version" not in self.decoded_common:
+                self.decoded_common["C_Version"] = int_list_to_string(
+                    ModbusClientMixin.convert_from_registers(
+                        inverter_data.registers[0:8],
+                        data_type=ModbusClientMixin.DATATYPE.UINT16,
+                    )
                 )
-            )
 
             # Main inverter data starts at offset 25 (address 40069 - 40044 = 25)
             # All register indices below are offset +25 from the original code.
