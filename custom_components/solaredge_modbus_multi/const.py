@@ -125,6 +125,8 @@ class ConfDefaultInt(IntEnum):
     SLEEP_AFTER_WRITE = 0
     BATTERY_RATING_ADJUST = 0
     BATTERY_ENERGY_RESET_CYCLES = 0
+    # Read control/settings blocks every Nth poll cycle (1 = every cycle)
+    SLOW_POLL_MULTIPLIER = 6
 
 
 class ConfDefaultFlag(IntEnum):
@@ -159,6 +161,7 @@ class ConfName(StrEnum):
     SLEEP_AFTER_WRITE = "sleep_after_write"
     BATTERY_RATING_ADJUST = "battery_rating_adjust"
     BATTERY_ENERGY_RESET_CYCLES = "battery_energy_reset_cycles"
+    SLOW_POLL_MULTIPLIER = "slow_poll_multiplier"
 
     # Old config entry names for migration
     NUMBER_INVERTERS = "number_of_inverters"

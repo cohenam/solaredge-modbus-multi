@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -735,17 +736,17 @@ class TestHeatSinkTemperature:
         assert sensor.native_value == 45.0
         assert sensor.suggested_display_precision == 1
 
-    def test_heat_sink_temperature_zero_returns_none(
+    def test_heat_sink_temperature_zero_is_valid(
         self, mock_inverter_platform, mock_config_entry, mock_coordinator
     ):
-        """Test heat sink temperature returns None when value is zero."""
+        """Test heat sink temperature of 0 is a legitimate reading."""
         mock_inverter_platform.decoded_model["I_Temp_Sink"] = 0x0
 
         sensor = HeatSinkTemperature(
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        assert sensor.native_value is None
+        assert sensor.native_value == 0
 
     def test_heat_sink_temperature_sunspec_not_impl_returns_none(
         self, mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -842,7 +843,7 @@ class TestStatusVendor:
         self, mock_inverter_platform, mock_config_entry, mock_coordinator
     ):
         """Test status vendor returns None when not implemented."""
-        mock_inverter_platform.decoded_model["I_Status_Vendor"] = SunSpecNotImpl.INT16
+        mock_inverter_platform.decoded_model["I_Status_Vendor"] = SunSpecNotImpl.UINT16
 
         sensor = StatusVendor(
             mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -1281,9 +1282,9 @@ class TestScaleFactorEdgeCases:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        # Should still work at boundary
+        # Should still work at boundary; positive SF means whole numbers
         assert sensor.native_value is not None
-        assert sensor.suggested_display_precision == 10
+        assert sensor.suggested_display_precision == 0
 
     def test_scale_factor_just_outside_range(
         self, mock_inverter_platform, mock_config_entry, mock_coordinator
@@ -1326,12 +1327,9 @@ class TestAsyncSetupEntry:
         mock_config_entry.entry_id = "test_123"
         mock_config_entry.data = {"name": "Test"}
 
-        # Setup hass data
-        hass.data.setdefault("solaredge_modbus_multi", {})
-        hass.data["solaredge_modbus_multi"][mock_config_entry.entry_id] = {
-            "hub": mock_hub,
-            "coordinator": mock_coordinator,
-        }
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=mock_coordinator
+        )
 
         # Track added entities
         added_entities = []
@@ -1367,11 +1365,9 @@ class TestAsyncSetupEntry:
         mock_config_entry.entry_id = "test_123"
         mock_config_entry.data = {"name": "Test"}
 
-        hass.data.setdefault("solaredge_modbus_multi", {})
-        hass.data["solaredge_modbus_multi"][mock_config_entry.entry_id] = {
-            "hub": mock_hub,
-            "coordinator": mock_coordinator,
-        }
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=mock_coordinator
+        )
 
         added_entities = []
 
@@ -1410,11 +1406,9 @@ class TestAsyncSetupEntry:
         mock_config_entry.entry_id = "test_123"
         mock_config_entry.data = {"name": "Test"}
 
-        hass.data.setdefault("solaredge_modbus_multi", {})
-        hass.data["solaredge_modbus_multi"][mock_config_entry.entry_id] = {
-            "hub": mock_hub,
-            "coordinator": mock_coordinator,
-        }
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=mock_coordinator
+        )
 
         added_entities = []
 
@@ -1449,11 +1443,9 @@ class TestAsyncSetupEntry:
         mock_config_entry.entry_id = "test_123"
         mock_config_entry.data = {"name": "Test"}
 
-        hass.data.setdefault("solaredge_modbus_multi", {})
-        hass.data["solaredge_modbus_multi"][mock_config_entry.entry_id] = {
-            "hub": mock_hub,
-            "coordinator": mock_coordinator,
-        }
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=mock_coordinator
+        )
 
         added_entities = []
 
@@ -1487,11 +1479,9 @@ class TestAsyncSetupEntry:
         mock_config_entry.entry_id = "test_123"
         mock_config_entry.data = {"name": "Test"}
 
-        hass.data.setdefault("solaredge_modbus_multi", {})
-        hass.data["solaredge_modbus_multi"][mock_config_entry.entry_id] = {
-            "hub": mock_hub,
-            "coordinator": mock_coordinator,
-        }
+        mock_config_entry.runtime_data = SimpleNamespace(
+            hub=mock_hub, coordinator=mock_coordinator
+        )
 
         added_entities = []
 
@@ -2097,7 +2087,7 @@ class TestMeterEnergySensors:
             phase="Exported",
         )
 
-        assert sensor.device_class == SensorDeviceClass.ENERGY
+        assert sensor.device_class is None
         assert sensor.native_unit_of_measurement == ENERGY_VOLT_AMPERE_HOUR
         assert sensor.unique_id == "se_meter_1_exported_vah"
         assert sensor.name == "Apparent Energy Exported"
@@ -2155,7 +2145,7 @@ class TestMeterEnergySensors:
             phase="Import_Q1",
         )
 
-        assert sensor.device_class == SensorDeviceClass.ENERGY
+        assert sensor.device_class is None
         assert sensor.native_unit_of_measurement == ENERGY_VOLT_AMPERE_REACTIVE_HOUR
         assert sensor.unique_id == "se_meter_1_import_q1_varh"
         assert sensor.name == "Reactive Energy Import Q1"

@@ -48,6 +48,140 @@ from .const import (
 from .helpers import float_to_hex, int_list_to_string
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def log_decoded(prefix: str, decoded: dict) -> None:
+    """Debug-dump decoded values in hex."""
+    if not _LOGGER.isEnabledFor(logging.DEBUG):
+        return
+
+    for name, value in decoded.items():
+        if isinstance(value, float):
+            display_value = float_to_hex(value)
+        else:
+            display_value = hex(value) if isinstance(value, int) else value
+        _LOGGER.debug(f"{prefix}: {name} {display_value} {type(value)}")
+
+
+# Field names decoded from each optional register block. Also used to
+# drop stale values when a block becomes unavailable (tiered polling
+# retains decoded_model values between slow poll cycles).
+GPC_DECODED_KEYS = ("I_RRCR", "I_Power_Limit", "I_CosPhi")
+SITE_LIMIT_DECODED_KEYS = (
+    "E_Lim_Ctl_Mode",
+    "E_Lim_Ctl",
+    "E_Site_Limit",
+    "Ext_Prod_Max",
+)
+GRID_STATUS_DECODED_KEYS = ("I_Grid_Status",)
+APC_INT32_FIELDS = [
+    "PwrFrqDeratingConfig",
+    "ReactivePwrConfig",
+    "ActivePwrGrad",
+    "AdvPwrCtrlEn",
+    "FrtEn",
+]
+APC_BLOCK1_FLOAT32_FIELDS = [
+    "FixedCosPhiPhase",
+    "FixedReactPwr",
+    "ReactCosPhiVsPX_0",
+    "ReactCosPhiVsPX_1",
+    "ReactCosPhiVsPX_2",
+    "ReactCosPhiVsPX_3",
+    "ReactCosPhiVsPX_4",
+    "ReactCosPhiVsPX_5",
+    "ReactCosPhiVsPY_0",
+    "ReactCosPhiVsPY_1",
+    "ReactCosPhiVsPY_2",
+    "ReactCosPhiVsPY_3",
+    "ReactCosPhiVsPY_4",
+    "ReactCosPhiVsPY_5",
+    "ReactQVsVgX_0",
+    "ReactQVsVgX_1",
+    "ReactQVsVgX_2",
+    "ReactQVsVgX_3",
+    "ReactQVsVgX_4",
+    "ReactQVsVgX_5",
+    "ReactQVsVgY_0",
+    "ReactQVsVgY_1",
+    "ReactQVsVgY_2",
+    "ReactQVsVgY_3",
+    "ReactQVsVgY_4",
+    "ReactQVsVgY_5",
+    "FRT_KFactor",
+    "PowerReduce",
+    "MaxWakeupFreq",
+    "MinWakeupFreq",
+    "MaxWakeupVg",
+    "MinWakeupVg",
+    "Vnom",
+    "Inom",
+    "PwrVsFreqX_0",
+    "PwrVsFreqX_1",
+]
+APC_BLOCK2_FLOAT32_FIELDS = [
+    "PwrVsFreqY_0",
+    "PwrVsFreqY_1",
+    "ResetFreq",
+    "MaxFreq",
+    "ReactQVsPX_0",
+    "ReactQVsPX_1",
+    "ReactQVsPX_2",
+    "ReactQVsPX_3",
+    "ReactQVsPX_4",
+    "ReactQVsPX_5",
+    "ReactQVsPY_0",
+    "ReactQVsPY_1",
+    "ReactQVsPY_2",
+    "ReactQVsPY_3",
+    "ReactQVsPY_4",
+    "ReactQVsPY_5",
+    "ReactCosPhiVsPVgLockInMax",
+    "ReactCosPhiVsPVgLockInMin",
+    "ReactCosPhiVsPVgLockOutMax",
+    "ReactCosPhiVsPVgLockOutMin",
+    "ReactQVsVgPLockInMax",
+    "ReactQVsVgPLockInMin",
+    "ReactQVsVgPLockOutMax",
+    "ReactQVsVgPLockOutMin",
+    "MaxCurrent",
+    "PwrVsVgX_0",
+    "PwrVsVgX_1",
+    "PwrVsVgX_2",
+    "PwrVsVgX_3",
+    "PwrVsVgX_4",
+    "PwrVsVgX_5",
+    "PwrVsVgY_0",
+    "PwrVsVgY_1",
+    "PwrVsVgY_2",
+    "PwrVsVgY_3",
+    "PwrVsVgY_4",
+    "PwrVsVgY_5",
+    "DisconnectAtZeroPwrLim",
+]
+APC_UINT32_FIELDS = [
+    "PwrFrqDeratingResetTime",
+    "PwrFrqDeratingGradTime",
+    "ReactQVsVgType",
+    "PwrSoftStartTime",
+]
+APC_DECODED_KEYS = (
+    "CommitPwrCtlSettings",
+    "RestorePwrCtlDefaults",
+    "ReactPwrIterTime",
+    *APC_INT32_FIELDS,
+    *APC_BLOCK1_FLOAT32_FIELDS,
+    *APC_BLOCK2_FLOAT32_FIELDS,
+    *APC_UINT32_FIELDS,
+)
+
+
+def drop_decoded(decoded: dict, keys) -> None:
+    """Remove block values so their entities go unavailable, not stale."""
+    for key in keys:
+        decoded.pop(key, None)
+
+
 pymodbus_version = importlib.metadata.version("pymodbus")
 
 
@@ -174,6 +308,18 @@ class SolarEdgeModbusMultiHub:
             ConfName.BATTERY_ENERGY_RESET_CYCLES,
             ConfDefaultInt.BATTERY_ENERGY_RESET_CYCLES,
         )
+        self._slow_poll_multiplier = max(
+            1,
+            int(
+                entry_options.get(
+                    ConfName.SLOW_POLL_MULTIPLIER,
+                    ConfDefaultInt.SLOW_POLL_MULTIPLIER,
+                )
+            ),
+        )
+        self._poll_cycle = -1
+        self._slow_poll_requests = 0
+        self.slow_poll_due = True
         self._retry_limit = self._yaml_config.get("retry", {}).get(
             "limit", RetrySettings.Limit
         )
@@ -298,9 +444,18 @@ class SolarEdgeModbusMultiHub:
                 _LOGGER.debug(
                     f"Device model matches EVSE at {self.hub_host} ID {inverter_unit_id}: {e}"
                 )
-                new_evse = SolarEdgeEVSE(inverter_unit_id, self)
-                await new_evse.init_device()
-                self.evses.append(new_evse)
+                try:
+                    new_evse = SolarEdgeEVSE(inverter_unit_id, self)
+                    await new_evse.init_device()
+                    self.evses.append(new_evse)
+
+                except (ModbusReadError, TimeoutError) as e:
+                    await self.disconnect()
+                    raise HubInitFailed(f"{e}")
+
+                except DeviceInvalid as e:
+                    # EVSEs are optional
+                    _LOGGER.error(f"EVSE at {self.hub_host} ID {inverter_unit_id}: {e}")
 
                 # Skip meter and battery detection if DeviceIsEVSE
                 continue
@@ -462,6 +617,18 @@ class SolarEdgeModbusMultiHub:
 
         self.online = True
 
+        # Decide the tier for this attempt, but only commit the cycle state
+        # after a successful poll: a failed attempt must not consume a due
+        # (or write-forced) slow poll. Write-forced polls are counted, not
+        # flagged, so a write landing mid-refresh keeps its request pending
+        # instead of being cleared by this refresh's completion.
+        next_cycle = self._poll_cycle + 1
+        served_slow_poll_requests = self._slow_poll_requests
+        self.slow_poll_due = (
+            served_slow_poll_requests > 0
+            or next_cycle % self._slow_poll_multiplier == 0
+        )
+
         try:
             async with asyncio.timeout(self.coordinator_timeout):
                 # Read all devices sequentially with batch lock per device
@@ -502,6 +669,11 @@ class SolarEdgeModbusMultiHub:
                 raise TimeoutError
 
             raise DataUpdateFailed(f"Timeout error: {e}")
+
+        self._poll_cycle = next_cycle
+        # Consume only the requests this poll actually served; requests from
+        # writes that landed during the refresh stay pending for the next one.
+        self._slow_poll_requests -= served_slow_poll_requests
 
         if self._timeout_counter > 0:
             _LOGGER.debug(
@@ -689,17 +861,6 @@ class SolarEdgeModbusMultiHub:
                         slave=unit,
                     )
 
-            self.has_write = address
-
-            if self.sleep_after_write > 0:
-                _LOGGER.debug(
-                    f"Sleep {self.sleep_after_write} seconds after write {address}."
-                )
-                await asyncio.sleep(self.sleep_after_write)
-
-            self.has_write = None
-            _LOGGER.debug(f"Finished with write {address}.")
-
         except ModbusIOException as e:
             await self.disconnect()
 
@@ -738,6 +899,20 @@ class SolarEdgeModbusMultiHub:
 
             await self.disconnect()
             raise ModbusWriteError(result)
+
+        self.has_write = address
+        # Control registers changed: request a slow-block re-read. A counter
+        # (not a flag) so an in-flight refresh can't consume this request.
+        self._slow_poll_requests += 1
+
+        if self.sleep_after_write > 0:
+            _LOGGER.debug(
+                f"Sleep {self.sleep_after_write} seconds after write {address}."
+            )
+            await asyncio.sleep(self.sleep_after_write)
+
+        self.has_write = None
+        _LOGGER.debug(f"Finished with write {address}.")
 
     @staticmethod
     def _safe_version_tuple(version_str: str) -> tuple[int, ...]:
@@ -990,7 +1165,7 @@ class SolarEdgeInverter:
         except ModbusIOError:
             raise DeviceInvalid(f"No response from inverter ID {self.inverter_unit_id}")
 
-        except ModbusIllegalAddress:
+        except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
             raise DeviceInvalid(
                 f"ID {self.inverter_unit_id} is not a SunSpec inverter."
             )
@@ -1055,7 +1230,7 @@ class SolarEdgeInverter:
                 f"No response from inverter ID {self.inverter_unit_id}"
             )
 
-        except ModbusIllegalAddress:
+        except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
             _LOGGER.debug(f"I{self.inverter_unit_id} is NOT Multiple MPPT")
             self.decoded_mmppt = None
 
@@ -1135,14 +1310,18 @@ class SolarEdgeInverter:
                 + [inverter_data.registers[54]]
                 + inverter_data.registers[63:65]
             )
-            self.decoded_model = dict(
-                zip(
-                    uint16_fields,
-                    ModbusClientMixin.convert_from_registers(
-                        uint16_data,
-                        data_type=ModbusClientMixin.DATATYPE.UINT16,
-                    ),
-                    strict=True,
+            # Update in place: values read on slow poll cycles (power control,
+            # site limit, storage) must survive the fast polls in between.
+            self.decoded_model.update(
+                dict(
+                    zip(
+                        uint16_fields,
+                        ModbusClientMixin.convert_from_registers(
+                            uint16_data,
+                            data_type=ModbusClientMixin.DATATYPE.UINT16,
+                        ),
+                        strict=True,
+                    )
                 )
             )
 
@@ -1364,8 +1543,10 @@ class SolarEdgeInverter:
                 )
 
         """ Global Dynamic Power Control and Status """
-        if self.hub.option_detect_extras is True and (
-            self.global_power_control is True or self.global_power_control is None
+        if (
+            self.hub.option_detect_extras is True
+            and (self.global_power_control is True or self.global_power_control is None)
+            and (self.hub.slow_poll_due or self.global_power_control is None)
         ):
             try:
                 async with asyncio.timeout(SolarEdgeTimeouts.Read / 1000):
@@ -1395,8 +1576,9 @@ class SolarEdgeInverter:
 
                     self.global_power_control = True
 
-            except ModbusIllegalAddress:
+            except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
                 self.global_power_control = False
+                drop_decoded(self.decoded_model, GPC_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: global power control NOT available"
                 )
@@ -1411,6 +1593,7 @@ class SolarEdgeInverter:
                     translation_key="detect_timeout_gpc",
                     data={"entry_id": self.hub._entry_id},
                 )
+                drop_decoded(self.decoded_model, GPC_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: The inverter did not respond while "
                     "reading data for Global Dynamic Power Controls. These entities "
@@ -1428,8 +1611,13 @@ class SolarEdgeInverter:
 
         """ Advanced Power Control """
         """ Power Control Block """
-        if self.hub.option_detect_extras is True and (
-            self.advanced_power_control is True or self.advanced_power_control is None
+        if (
+            self.hub.option_detect_extras is True
+            and (
+                self.advanced_power_control is True
+                or self.advanced_power_control is None
+            )
+            and (self.hub.slow_poll_due or self.advanced_power_control is None)
         ):
             try:
                 async with asyncio.timeout(SolarEdgeTimeouts.Read / 1000):
@@ -1437,13 +1625,7 @@ class SolarEdgeInverter:
                         unit=self.inverter_unit_id, address=61696, rcount=86
                     )
 
-                    int32_fields = [
-                        "PwrFrqDeratingConfig",
-                        "ReactivePwrConfig",
-                        "ActivePwrGrad",
-                        "AdvPwrCtrlEn",
-                        "FrtEn",
-                    ]
+                    int32_fields = APC_INT32_FIELDS
                     int32_data = (
                         inverter_data.registers[2:6]
                         + inverter_data.registers[8:10]
@@ -1463,44 +1645,7 @@ class SolarEdgeInverter:
                         )
                     )
 
-                    float32_fields = [
-                        "FixedCosPhiPhase",
-                        "FixedReactPwr",
-                        "ReactCosPhiVsPX_0",
-                        "ReactCosPhiVsPX_1",
-                        "ReactCosPhiVsPX_2",
-                        "ReactCosPhiVsPX_3",
-                        "ReactCosPhiVsPX_4",
-                        "ReactCosPhiVsPX_5",
-                        "ReactCosPhiVsPY_0",
-                        "ReactCosPhiVsPY_1",
-                        "ReactCosPhiVsPY_2",
-                        "ReactCosPhiVsPY_3",
-                        "ReactCosPhiVsPY_4",
-                        "ReactCosPhiVsPY_5",
-                        "ReactQVsVgX_0",
-                        "ReactQVsVgX_1",
-                        "ReactQVsVgX_2",
-                        "ReactQVsVgX_3",
-                        "ReactQVsVgX_4",
-                        "ReactQVsVgX_5",
-                        "ReactQVsVgY_0",
-                        "ReactQVsVgY_1",
-                        "ReactQVsVgY_2",
-                        "ReactQVsVgY_3",
-                        "ReactQVsVgY_4",
-                        "ReactQVsVgY_5",
-                        "FRT_KFactor",
-                        "PowerReduce",
-                        "MaxWakeupFreq",
-                        "MinWakeupFreq",
-                        "MaxWakeupVg",
-                        "MinWakeupVg",
-                        "Vnom",
-                        "Inom",
-                        "PwrVsFreqX_0",
-                        "PwrVsFreqX_1",
-                    ]
+                    float32_fields = APC_BLOCK1_FLOAT32_FIELDS
                     float32_data = (
                         inverter_data.registers[10:66] + inverter_data.registers[70:86]
                     )
@@ -1543,46 +1688,7 @@ class SolarEdgeInverter:
                         unit=self.inverter_unit_id, address=61782, rcount=84
                     )
 
-                    float32_fields = [
-                        "PwrVsFreqY_0",
-                        "PwrVsFreqY_1",
-                        "ResetFreq",
-                        "MaxFreq",
-                        "ReactQVsPX_0",
-                        "ReactQVsPX_1",
-                        "ReactQVsPX_2",
-                        "ReactQVsPX_3",
-                        "ReactQVsPX_4",
-                        "ReactQVsPX_5",
-                        "ReactQVsPY_0",
-                        "ReactQVsPY_1",
-                        "ReactQVsPY_2",
-                        "ReactQVsPY_3",
-                        "ReactQVsPY_4",
-                        "ReactQVsPY_5",
-                        "ReactCosPhiVsPVgLockInMax",
-                        "ReactCosPhiVsPVgLockInMin",
-                        "ReactCosPhiVsPVgLockOutMax",
-                        "ReactCosPhiVsPVgLockOutMin",
-                        "ReactQVsVgPLockInMax",
-                        "ReactQVsVgPLockInMin",
-                        "ReactQVsVgPLockOutMax",
-                        "ReactQVsVgPLockOutMin",
-                        "MaxCurrent",
-                        "PwrVsVgX_0",
-                        "PwrVsVgX_1",
-                        "PwrVsVgX_2",
-                        "PwrVsVgX_3",
-                        "PwrVsVgX_4",
-                        "PwrVsVgX_5",
-                        "PwrVsVgY_0",
-                        "PwrVsVgY_1",
-                        "PwrVsVgY_2",
-                        "PwrVsVgY_3",
-                        "PwrVsVgY_4",
-                        "PwrVsVgY_5",
-                        "DisconnectAtZeroPwrLim",
-                    ]
+                    float32_fields = APC_BLOCK2_FLOAT32_FIELDS
                     float32_data = (
                         inverter_data.registers[0:32]
                         + inverter_data.registers[36:52]
@@ -1602,12 +1708,7 @@ class SolarEdgeInverter:
                         )
                     )
 
-                    uint32_fields = [
-                        "PwrFrqDeratingResetTime",
-                        "PwrFrqDeratingGradTime",
-                        "ReactQVsVgType",
-                        "PwrSoftStartTime",
-                    ]
+                    uint32_fields = APC_UINT32_FIELDS
                     uint32_data = (
                         inverter_data.registers[32:36] + inverter_data.registers[52:56]
                     )
@@ -1617,7 +1718,7 @@ class SolarEdgeInverter:
                                 uint32_fields,
                                 ModbusClientMixin.convert_from_registers(
                                     uint32_data,
-                                    data_type=ModbusClientMixin.DATATYPE.FLOAT32,
+                                    data_type=ModbusClientMixin.DATATYPE.UINT32,
                                     word_order="little",
                                 ),
                                 strict=True,
@@ -1627,8 +1728,9 @@ class SolarEdgeInverter:
 
                     self.advanced_power_control = True
 
-            except ModbusIllegalAddress:
+            except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
                 self.advanced_power_control = False
+                drop_decoded(self.decoded_model, APC_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: advanced power control NOT available"
                 )
@@ -1643,6 +1745,7 @@ class SolarEdgeInverter:
                     translation_key="detect_timeout_apc",
                     data={"entry_id": self.hub._entry_id},
                 )
+                drop_decoded(self.decoded_model, APC_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: The inverter did not respond while "
                     "reading data for Advanced Power Controls. These entities "
@@ -1662,6 +1765,7 @@ class SolarEdgeInverter:
         if (
             self.hub.option_site_limit_control is True
             and self.site_limit_control is not False
+            and (self.hub.slow_poll_due or self.site_limit_control is None)
         ):
             """Site Limit and Mode"""
             try:
@@ -1691,8 +1795,9 @@ class SolarEdgeInverter:
 
                 self.site_limit_control = True
 
-            except ModbusIllegalAddress:
+            except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
                 self.site_limit_control = False
+                drop_decoded(self.decoded_model, SITE_LIMIT_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: site limit control NOT available"
                 )
@@ -1718,7 +1823,7 @@ class SolarEdgeInverter:
                     }
                 )
 
-            except ModbusIllegalAddress:
+            except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
                 try:
                     del self.decoded_model["Ext_Prod_Max"]
                 except KeyError:
@@ -1749,11 +1854,13 @@ class SolarEdgeInverter:
                 )
                 self._grid_status = True
 
-            except ModbusIllegalAddress:
+            except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
                 self._grid_status = False
+                drop_decoded(self.decoded_model, GRID_STATUS_DECODED_KEYS)
                 _LOGGER.debug(f"I{self.inverter_unit_id}: Grid On/Off NOT available")
 
             except ModbusIOException as e:
+                drop_decoded(self.decoded_model, GRID_STATUS_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: A modbus I/O exception occurred "
                     "while reading data for Grid On/Off Status. This entity "
@@ -1769,20 +1876,13 @@ class SolarEdgeInverter:
                 if not self.hub.is_connected:
                     await self.hub.connect()
 
-        if _LOGGER.isEnabledFor(logging.DEBUG):
-            for name, value in iter(self.decoded_model.items()):
-                if isinstance(value, float):
-                    display_value = float_to_hex(value)
-                else:
-                    display_value = hex(value) if isinstance(value, int) else value
-                _LOGGER.debug(
-                    f"I{self.inverter_unit_id}: {name} {display_value} {type(value)}"
-                )
+        log_decoded(f"I{self.inverter_unit_id}", self.decoded_model)
 
         """ Power Control Options: Storage Control """
         if (
             self.hub.option_storage_control is True
             and self.decoded_storage_control is not False
+            and (self.hub.slow_poll_due or self.decoded_storage_control is None)
         ):
             if self.has_battery is None:
                 self.has_battery = False
@@ -1851,20 +1951,9 @@ class SolarEdgeInverter:
                     }
                 )
 
-                if _LOGGER.isEnabledFor(logging.DEBUG):
-                    for name, value in iter(self.decoded_storage_control.items()):
-                        if isinstance(value, float):
-                            display_value = float_to_hex(value)
-                        else:
-                            display_value = (
-                                hex(value) if isinstance(value, int) else value
-                            )
-                        _LOGGER.debug(
-                            f"I{self.inverter_unit_id}: "
-                            f"{name} {display_value} {type(value)}"
-                        )
+                log_decoded(f"I{self.inverter_unit_id}", self.decoded_storage_control)
 
-            except ModbusIllegalAddress:
+            except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
                 self.decoded_storage_control = False
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: storage control NOT available"
@@ -2079,7 +2168,7 @@ class SolarEdgeMeter:
         except ModbusIOError:
             raise DeviceInvalid(f"No response from inverter ID {self.inverter_unit_id}")
 
-        except ModbusIllegalAddress:
+        except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
             raise DeviceInvalid(f"Meter {self.meter_id}: unsupported address")
 
         self.manufacturer = self.decoded_common["C_Manufacturer"]
@@ -2240,15 +2329,7 @@ class SolarEdgeMeter:
                 f"No response from inverter ID {self.inverter_unit_id}"
             )
 
-        if _LOGGER.isEnabledFor(logging.DEBUG):
-            for name, value in iter(self.decoded_model.items()):
-                _LOGGER.debug(
-                    (
-                        f"I{self.inverter_unit_id}M{self.meter_id}: "
-                        f"{name} {hex(value) if isinstance(value, int) else value} "
-                        f"{type(value)}"
-                    ),
-                )
+        log_decoded(f"I{self.inverter_unit_id}M{self.meter_id}", self.decoded_model)
 
         if (
             self.decoded_model["C_SunSpec_DID"] == SunSpecNotImpl.UINT16
@@ -2383,22 +2464,14 @@ class SolarEdgeBattery:
                 ]
             )
 
-            for name, value in iter(self.decoded_common.items()):
-                if isinstance(value, float):
-                    display_value = float_to_hex(value)
-                else:
-                    display_value = hex(value) if isinstance(value, int) else value
-                _LOGGER.debug(
-                    (
-                        f"I{self.inverter_unit_id}B{self.battery_id}: "
-                        f"{name} {display_value} {type(value)}"
-                    ),
-                )
+            log_decoded(
+                f"I{self.inverter_unit_id}B{self.battery_id}", self.decoded_common
+            )
 
         except ModbusIOError:
             raise DeviceInvalid(f"No response from inverter ID {self.inverter_unit_id}")
 
-        except ModbusIllegalAddress:
+        except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
             raise DeviceInvalid(f"Battery {self.battery_id} unsupported address")
 
         self.decoded_common["B_Manufacturer"] = self.decoded_common[
@@ -2551,17 +2624,7 @@ class SolarEdgeBattery:
                 f"No response from inverter ID {self.inverter_unit_id}"
             )
 
-        if _LOGGER.isEnabledFor(logging.DEBUG):
-            for name, value in iter(self.decoded_model.items()):
-                if isinstance(value, float):
-                    display_value = float_to_hex(value)
-                else:
-                    display_value = hex(value) if isinstance(value, int) else value
-
-                _LOGGER.debug(
-                    f"I{self.inverter_unit_id}B{self.battery_id}: "
-                    f"{name} {display_value} {type(value)}"
-                )
+        log_decoded(f"I{self.inverter_unit_id}B{self.battery_id}", self.decoded_model)
 
     def set_last_update(self, timestamp) -> None:
         self._last_update_timestamp = timestamp
@@ -2719,9 +2782,11 @@ class SolarEdgeEVSE:
                 )
 
         except ModbusIOError:
-            raise DeviceInvalid(f"No response from evse ID {self.evse_unit_id}")
+            # Transport failure, not an invalid device: the device already
+            # answered the inverter probe, so surface this as retryable.
+            raise ModbusReadError(f"No response from evse ID {self.evse_unit_id}")
 
-        except ModbusIllegalAddress:
+        except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
             raise DeviceInvalid(f"ID {self.evse_unit_id} is not SunSpec.")
 
         if (
@@ -2756,17 +2821,9 @@ class SolarEdgeEVSE:
                 )
             )
 
-            if _LOGGER.isEnabledFor(logging.DEBUG):
-                for name, value in iter(self.decoded_model.items()):
-                    if isinstance(value, float):
-                        display_value = float_to_hex(value)
-                    else:
-                        display_value = hex(value) if isinstance(value, int) else value
-                    _LOGGER.debug(
-                        f"E{self.evse_unit_id}: {name} {display_value} {type(value)}"
-                    )
+            log_decoded(f"E{self.evse_unit_id}", self.decoded_model)
 
-        except ModbusIllegalAddress:
+        except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
             _LOGGER.error(f"E{self.evse_unit_id}: EVSE register(s) NOT available")
 
         except ModbusIOError:

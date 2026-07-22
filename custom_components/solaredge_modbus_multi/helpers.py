@@ -5,7 +5,7 @@ import struct
 
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN_REGEX
+from .const import DOMAIN_REGEX, SunSpecNotImpl
 
 
 def float_to_hex(f: float) -> str:
@@ -37,7 +37,7 @@ def update_accum(self, accum_value: int) -> None:
         self.last = 0
 
     if not accum_value > 0:
-        raise ValueError("update_accum must be non-zero value.")
+        raise ValueError("update_accum: accumulator has no value (SunSpec NA).")
 
     if accum_value >= self.last:
         # doesn't check accumulator rollover, but it would probably take
@@ -46,6 +46,11 @@ def update_accum(self, accum_value: int) -> None:
         return accum_value
     else:
         raise ValueError("update_accum must be an increasing value.")
+
+
+def is_float32_not_impl(value) -> bool:
+    """Return True if a FLOAT32 value is the SunSpec not-implemented sentinel."""
+    return float_to_hex(value) == hex(SunSpecNotImpl.FLOAT32)
 
 
 def host_valid(host):

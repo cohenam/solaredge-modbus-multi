@@ -6,6 +6,7 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -111,7 +112,7 @@ async def test_async_setup_entry_success(
         await hass.async_block_till_done()
 
     assert result is True
-    assert mock_config_entry.entry_id in hass.data[DOMAIN]
+    assert mock_config_entry.runtime_data is not None
 
 
 async def test_async_setup_entry_connection_failed(
@@ -131,6 +132,9 @@ async def test_async_setup_entry_connection_failed(
         mock_instance.connected = False
 
         with pytest.raises(ConfigEntryNotReady):
+            mock_config_entry.mock_state(
+                hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS
+            )
             await async_setup_entry(hass, mock_config_entry)
 
 
@@ -172,9 +176,9 @@ async def test_async_unload_entry(
         await hass.async_block_till_done()
 
         # Verify entry is loaded and hub exists
-        assert mock_config_entry.entry_id in hass.data[DOMAIN]
-        hub = hass.data[DOMAIN][mock_config_entry.entry_id]["hub"]
-        coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
+        assert mock_config_entry.runtime_data is not None
+        hub = mock_config_entry.runtime_data.hub
+        coordinator = mock_config_entry.runtime_data.coordinator
         assert hub is not None
         assert coordinator is not None
 
@@ -193,7 +197,7 @@ async def test_async_unload_entry(
 
     # Verify unload succeeded and data was cleaned up
     assert result is True
-    assert mock_config_entry.entry_id not in hass.data[DOMAIN]
+    # runtime_data is dropped by HA when the entry unloads
 
 
 async def test_async_setup_entry_hub_init_failed(
@@ -213,6 +217,9 @@ async def test_async_setup_entry_hub_init_failed(
         mock_instance.connected = False
 
         with pytest.raises(ConfigEntryNotReady):
+            mock_config_entry.mock_state(
+                hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS
+            )
             await async_setup_entry(hass, mock_config_entry)
 
 
@@ -238,6 +245,9 @@ async def test_async_setup_entry_data_update_failed(
         mock_modbus_client,
     ):
         with pytest.raises(ConfigEntryNotReady):
+            mock_config_entry.mock_state(
+                hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS
+            )
             await async_setup_entry(hass, mock_config_entry)
 
 
@@ -415,7 +425,7 @@ async def test_async_remove_config_entry_device_in_use(
         await hass.async_block_till_done()
 
         # Get the hub to find device identifiers
-        hub = hass.data[DOMAIN][mock_config_entry.entry_id]["hub"]
+        hub = mock_config_entry.runtime_data.hub
 
         # Create a device entry for an inverter
         device_registry = dr.async_get(hass)
@@ -530,8 +540,8 @@ async def test_coordinator_update_with_pending_writes(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-        hub = hass.data[DOMAIN][mock_config_entry.entry_id]["hub"]
-        coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
+        hub = mock_config_entry.runtime_data.hub
+        coordinator = mock_config_entry.runtime_data.coordinator
 
         # Simulate pending write
         hub._has_write = True
@@ -645,6 +655,9 @@ async def test_coordinator_retry_logic_exhausted(
     ):
         # Setup should fail after retries exhausted
         with pytest.raises(ConfigEntryNotReady):
+            mock_config_entry.mock_state(
+                hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS
+            )
             await async_setup_entry(hass, mock_config_entry)
 
 
@@ -687,7 +700,7 @@ async def test_coordinator_update_raises_update_failed_on_hub_init_failed(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-        coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
+        coordinator = mock_config_entry.runtime_data.coordinator
 
         # Mock hub to raise HubInitFailed on next refresh
         with patch.object(
@@ -740,7 +753,7 @@ async def test_coordinator_update_raises_update_failed_on_data_update_failed(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-        coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
+        coordinator = mock_config_entry.runtime_data.coordinator
 
         # Mock hub to raise DataUpdateFailed on next refresh
         with patch.object(

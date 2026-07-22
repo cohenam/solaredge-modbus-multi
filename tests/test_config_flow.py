@@ -23,13 +23,44 @@ def auto_enable_custom_integrations(enable_custom_integrations):
     yield
 
 
-async def test_form_user(hass: HomeAssistant) -> None:
-    """Test the user config flow shows form."""
+async def _start_manual_flow(hass: HomeAssistant):
+    """Start a user flow and select manual setup from the menu."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
-    assert result["type"] == FlowResultType.FORM
+    assert result["type"] == FlowResultType.MENU
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "manual_list"}
+    )
+
+
+def _mock_device_scanner(inverters=None, no_response=None, other_devices=None):
+    """Patch the manual flow's device ID verification scanner."""
+    scanner = AsyncMock()
+    scanner.check_list.return_value = {
+        "inverters": inverters or [],
+        "no_response": no_response or [],
+        "other_devices": other_devices or [],
+    }
+    return patch(
+        "custom_components.solaredge_modbus_multi.config_flow.SolarEdgeDeviceScanner",
+        return_value=scanner,
+    )
+
+
+async def test_form_user(hass: HomeAssistant) -> None:
+    """Test the user config flow shows setup menu, then manual form."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["type"] == FlowResultType.MENU
     assert result["step_id"] == "user"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "manual_list"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "manual"
     assert result["errors"] == {}
 
 
@@ -47,13 +78,14 @@ async def test_form_user_with_valid_input(
         mock_inverter_registers
     )
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_manual_flow(hass)
 
-    with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
-        mock_modbus_client,
+    with (
+        patch(
+            "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+            mock_modbus_client,
+        ),
+        _mock_device_scanner(inverters=[1]),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -75,17 +107,9 @@ async def test_form_user_with_valid_input(
 
 async def test_form_cannot_connect(hass: HomeAssistant) -> None:
     """Test connection errors result in entry that retries."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_manual_flow(hass)
 
-    with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient"
-    ) as mock_client:
-        mock_instance = mock_client.return_value
-        mock_instance.connect = AsyncMock(side_effect=ConnectionError("Failed"))
-        mock_instance.connected = False
-
+    with _mock_device_scanner(no_response=[1]):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             {
@@ -96,12 +120,9 @@ async def test_form_cannot_connect(hass: HomeAssistant) -> None:
             },
         )
 
-    # Config flow creates entry, setup raises ConfigEntryNotReady for retry
-    assert result["type"] in (
-        FlowResultType.CREATE_ENTRY,
-        FlowResultType.FORM,
-        FlowResultType.ABORT,
-    )
+    # No response from the device ID keeps the user on the form with an error
+    assert result["type"] == FlowResultType.FORM
+    assert ConfName.DEVICE_LIST in result["errors"]
 
 
 async def test_form_duplicate_entry(
@@ -121,20 +142,19 @@ async def test_form_duplicate_entry(
     )
     existing_entry.add_to_hass(hass)
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_manual_flow(hass)
 
     # Try to add same host:port
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {
-            CONF_NAME: "Duplicate SolarEdge",
-            CONF_HOST: "192.168.1.100",
-            CONF_PORT: 1502,
-            ConfName.DEVICE_LIST: "1",
-        },
-    )
+    with _mock_device_scanner(inverters=[1]):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Duplicate SolarEdge",
+                CONF_HOST: "192.168.1.100",
+                CONF_PORT: 1502,
+                ConfName.DEVICE_LIST: "1",
+            },
+        )
 
     # Should abort due to duplicate
     assert result["type"] == FlowResultType.ABORT
@@ -143,9 +163,7 @@ async def test_form_duplicate_entry(
 
 async def test_form_invalid_host(hass: HomeAssistant) -> None:
     """Test invalid host error."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_manual_flow(hass)
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -163,9 +181,7 @@ async def test_form_invalid_host(hass: HomeAssistant) -> None:
 
 async def test_form_invalid_port(hass: HomeAssistant) -> None:
     """Test invalid port error."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_manual_flow(hass)
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -183,9 +199,7 @@ async def test_form_invalid_port(hass: HomeAssistant) -> None:
 
 async def test_form_invalid_device_list(hass: HomeAssistant) -> None:
     """Test invalid device list error."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_manual_flow(hass)
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -198,25 +212,24 @@ async def test_form_invalid_device_list(hass: HomeAssistant) -> None:
     )
 
     assert result["type"] == FlowResultType.FORM
-    assert ConfName.DEVICE_LIST in result["errors"]
+    assert result["errors"] == {CONF_HOST: "invalid_device_id"}
 
 
 async def test_form_invalid_inverter_count(hass: HomeAssistant) -> None:
     """Test invalid inverter count error."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_manual_flow(hass)
 
     # Test too many inverters (>32)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {
-            CONF_NAME: "Test SolarEdge",
-            CONF_HOST: "192.168.1.100",
-            CONF_PORT: 1502,
-            ConfName.DEVICE_LIST: ",".join(str(i) for i in range(1, 34)),
-        },
-    )
+    with _mock_device_scanner(inverters=list(range(1, 34))):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Test SolarEdge",
+                CONF_HOST: "192.168.1.100",
+                CONF_PORT: 1502,
+                ConfName.DEVICE_LIST: ",".join(str(i) for i in range(1, 34)),
+            },
+        )
 
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {ConfName.DEVICE_LIST: "invalid_inverter_count"}

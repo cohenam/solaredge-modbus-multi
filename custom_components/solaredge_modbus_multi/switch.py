@@ -6,25 +6,25 @@ import logging
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from pymodbus.client.mixin import ModbusClientMixin
 
-from .const import DOMAIN, SunSpecNotImpl
+from . import SolarEdgeConfigEntry
+from .const import SunSpecNotImpl
+from .entity import SolarEdgeEntityBase
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: SolarEdgeConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    hub = hass.data[DOMAIN][config_entry.entry_id]["hub"]
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
+    hub = config_entry.runtime_data.hub
+    coordinator = config_entry.runtime_data.coordinator
 
     entities = []
 
@@ -45,36 +45,8 @@ async def async_setup_entry(
         async_add_entities(entities)
 
 
-class SolarEdgeSwitchBase(CoordinatorEntity, SwitchEntity):
-    should_poll = False
-    _attr_has_entity_name = True
-
-    def __init__(self, platform, config_entry, coordinator) -> None:
-        """Pass coordinator to CoordinatorEntity."""
-        super().__init__(coordinator)
-        """Initialize the sensor."""
-        self._platform = platform
-        self._config_entry = config_entry
-
-    @property
-    def device_info(self):
-        return self._platform.device_info
-
-    @property
-    def config_entry_id(self):
-        return self._config_entry.entry_id
-
-    @property
-    def config_entry_name(self):
-        return self._config_entry.data["name"]
-
-    @property
-    def available(self) -> bool:
-        return super().available and self._platform.online
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        self.async_write_ha_state()
+class SolarEdgeSwitchBase(SolarEdgeEntityBase, SwitchEntity):
+    """Base class for SolarEdge switch entities."""
 
 
 class SolarEdgeExternalProduction(SolarEdgeSwitchBase):

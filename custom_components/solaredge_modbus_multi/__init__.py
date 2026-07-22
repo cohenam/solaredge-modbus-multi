@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import timedelta
 
 import voluptuous as vol
@@ -19,6 +20,17 @@ from .const import DOMAIN, ConfDefaultInt, ConfName, RetrySettings
 from .hub import DataUpdateFailed, HubInitFailed, SolarEdgeModbusMultiHub
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class SolarEdgeData:
+    """Runtime data for a SolarEdge Modbus Multi config entry."""
+
+    hub: SolarEdgeModbusMultiHub
+    coordinator: SolarEdgeCoordinator
+
+
+type SolarEdgeConfigEntry = ConfigEntry[SolarEdgeData]
 
 PLATFORMS: list[str] = [
     Platform.BINARY_SENSOR,
@@ -65,7 +77,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: SolarEdgeConfigEntry) -> bool:
     """Set up SolarEdge Modbus Muti from a config entry."""
 
     solaredge_hub = SolarEdgeModbusMultiHub(
@@ -74,14 +86,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinator = SolarEdgeCoordinator(
         hass,
+        entry,
         solaredge_hub,
         entry.options.get(CONF_SCAN_INTERVAL, ConfDefaultInt.SCAN_INTERVAL),
     )
 
-    hass.data[DOMAIN][entry.entry_id] = {
-        "hub": solaredge_hub,
-        "coordinator": coordinator,
-    }
+    entry.runtime_data = SolarEdgeData(hub=solaredge_hub, coordinator=coordinator)
 
     try:
         await coordinator.async_config_entry_first_refresh()
@@ -104,16 +114,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: SolarEdgeConfigEntry) -> bool:
     """Unload a config entry."""
-    solaredge_hub = hass.data[DOMAIN][entry.entry_id]["hub"]
-    await solaredge_hub.shutdown()
+    await entry.runtime_data.hub.shutdown()
 
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
-
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -125,7 +130,7 @@ async def async_remove_config_entry_device(
     hass: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
 ) -> bool:
     """Remove a config entry from a device."""
-    solaredge_hub = hass.data[DOMAIN][config_entry.entry_id]["hub"]
+    solaredge_hub = config_entry.runtime_data.hub
 
     known_devices = set()
 
@@ -245,11 +250,16 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
 class SolarEdgeCoordinator(DataUpdateCoordinator):
     def __init__(
-        self, hass: HomeAssistant, hub: SolarEdgeModbusMultiHub, scan_interval: int
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        hub: SolarEdgeModbusMultiHub,
+        scan_interval: int,
     ):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=config_entry,
             name="SolarEdge Coordinator",
             update_interval=timedelta(seconds=scan_interval),
             # Note: always_update defaults to True, which is required because

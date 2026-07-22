@@ -3,15 +3,13 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.select import SelectEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from pymodbus.client.mixin import ModbusClientMixin
 
+from . import SolarEdgeConfigEntry
 from .const import (
-    DOMAIN,
     LIMIT_CONTROL,
     LIMIT_CONTROL_MODE,
     REACTIVE_POWER_CONFIG,
@@ -20,17 +18,18 @@ from .const import (
     STORAGE_MODE,
     SunSpecNotImpl,
 )
+from .entity import SolarEdgeEntityBase
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: SolarEdgeConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    hub = hass.data[DOMAIN][config_entry.entry_id]["hub"]
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
+    hub = config_entry.runtime_data.hub
+    coordinator = config_entry.runtime_data.coordinator
 
     entities = []
 
@@ -66,37 +65,8 @@ def get_key(d, search):
     return None
 
 
-class SolarEdgeSelectBase(CoordinatorEntity, SelectEntity):
-    should_poll = False
-    _attr_has_entity_name = True
+class SolarEdgeSelectBase(SolarEdgeEntityBase, SelectEntity):
     entity_category = EntityCategory.CONFIG
-
-    def __init__(self, platform, config_entry, coordinator):
-        """Pass coordinator to CoordinatorEntity."""
-        super().__init__(coordinator)
-        """Initialize the sensor."""
-        self._platform = platform
-        self._config_entry = config_entry
-
-    @property
-    def device_info(self):
-        return self._platform.device_info
-
-    @property
-    def config_entry_id(self):
-        return self._config_entry.entry_id
-
-    @property
-    def config_entry_name(self):
-        return self._config_entry.data["name"]
-
-    @property
-    def available(self) -> bool:
-        return super().available and self._platform.online
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        self.async_write_ha_state()
 
 
 class StorageControlMode(SolarEdgeSelectBase):
@@ -329,7 +299,7 @@ class SolaredgeLimitControlMode(SolarEdgeSelectBase):
     def available(self) -> bool:
         try:
             if self._platform.decoded_model["E_Lim_Ctl_Mode"] == SunSpecNotImpl.UINT16:
-                return None
+                return False
 
             return super().available
 
