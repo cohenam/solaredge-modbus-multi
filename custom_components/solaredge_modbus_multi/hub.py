@@ -586,9 +586,11 @@ class SolarEdgeModbusMultiHub:
     async def _read_registers_unlocked(self, unit, address, rcount):
         """Read modbus registers (internal, caller must hold _modbus_lock)."""
 
-        _LOGGER.debug(
-            f"I{unit}: modbus_read_holding_registers address={address} count={rcount}"
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                f"I{unit}: modbus_read_holding_registers "
+                f"address={address} count={rcount}"
+            )
 
         if self._use_device_id_param:
             result = await self._client.read_holding_registers(
@@ -599,7 +601,8 @@ class SolarEdgeModbusMultiHub:
                 address=address, count=rcount, slave=unit
             )
 
-        _LOGGER.debug(f"I{unit}: result is error: {result.isError()} ")
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(f"I{unit}: result is error: {result.isError()} ")
 
         if result.isError():
             _LOGGER.debug(f"I{unit}: error result: {type(result)} ")
@@ -622,11 +625,12 @@ class SolarEdgeModbusMultiHub:
 
             raise ModbusReadError(result)
 
-        _LOGGER.debug(
-            f"I{unit}: Registers received={len(result.registers)} "
-            f"requested={rcount} address={address} "
-            f"result={result}"
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                f"I{unit}: Registers received={len(result.registers)} "
+                f"requested={rcount} address={address} "
+                f"result={result}"
+            )
 
         if len(result.registers) != rcount:
             raise ModbusReadError(
@@ -1845,15 +1849,18 @@ class SolarEdgeInverter:
                     }
                 )
 
-                for name, value in iter(self.decoded_storage_control.items()):
-                    if isinstance(value, float):
-                        display_value = float_to_hex(value)
-                    else:
-                        display_value = hex(value) if isinstance(value, int) else value
-                    _LOGGER.debug(
-                        f"I{self.inverter_unit_id}: "
-                        f"{name} {display_value} {type(value)}"
-                    )
+                if _LOGGER.isEnabledFor(logging.DEBUG):
+                    for name, value in iter(self.decoded_storage_control.items()):
+                        if isinstance(value, float):
+                            display_value = float_to_hex(value)
+                        else:
+                            display_value = (
+                                hex(value) if isinstance(value, int) else value
+                            )
+                        _LOGGER.debug(
+                            f"I{self.inverter_unit_id}: "
+                            f"{name} {display_value} {type(value)}"
+                        )
 
             except ModbusIllegalAddress:
                 self.decoded_storage_control = False
