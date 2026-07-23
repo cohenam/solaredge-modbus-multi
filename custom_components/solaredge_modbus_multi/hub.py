@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import datetime
 import importlib.metadata
-import inspect
 import logging
 
 from awesomeversion import AwesomeVersion
@@ -46,6 +45,7 @@ from .const import (
     SunSpecNotImpl,
 )
 from .helpers import float_to_hex, int_list_to_string
+from .modbus_transport import ModbusTransport
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -375,10 +375,17 @@ class SolarEdgeModbusMultiHub:
         self._online = True
         self._timeout_counter = 0
 
-        self._client = None
-        self._modbus_lock = asyncio.Lock()
-        self._lock_holder = None  # Track current task holding the lock
-        self._use_device_id_param = None  # Cached signature check
+        # The factory resolves this module's AsyncModbusTcpClient at call
+        # time, so tests patching hub.AsyncModbusTcpClient keep working.
+        self._transport = ModbusTransport(
+            host=self._host,
+            port=self._port,
+            timeout=self._mb_timeout,
+            retries=self._mb_retries,
+            reconnect_delay=self._mb_reconnect_delay,
+            reconnect_delay_max=self._mb_reconnect_delay_max,
+            client_factory=lambda **kwargs: AsyncModbusTcpClient(**kwargs),
+        )
 
         self._pymodbus_version = pymodbus_version
 
@@ -725,60 +732,13 @@ class SolarEdgeModbusMultiHub:
 
         return True
 
-    async def _connect_unlocked(self) -> None:
-        """Connect to inverter (internal, caller must hold _modbus_lock)."""
-        if self._client is None:
-            _LOGGER.debug(
-                "New AsyncModbusTcpClient: "
-                f"reconnect_delay={self._mb_reconnect_delay} "
-                f"reconnect_delay_max={self._mb_reconnect_delay_max} "
-                f"timeout={self._mb_timeout} "
-                f"retries={self._mb_retries}"
-            )
-            self._client = AsyncModbusTcpClient(
-                host=self._host,
-                port=self._port,
-                reconnect_delay=self._mb_reconnect_delay,
-                reconnect_delay_max=self._mb_reconnect_delay_max,
-                timeout=self._mb_timeout,
-                retries=self._mb_retries,
-            )
-            # Cache signature check once
-            sig = inspect.signature(self._client.read_holding_registers)
-            self._use_device_id_param = "device_id" in sig.parameters
-
-        _LOGGER.debug((f"Connecting to {self._host}:{self._port} ..."))
-        await self._client.connect()
-
     async def connect(self) -> None:
         """Connect to inverter."""
-        if self._lock_holder is asyncio.current_task():
-            await self._connect_unlocked()
-            return
-        async with self._modbus_lock:
-            await self._connect_unlocked()
-
-    def _disconnect_unlocked(self, clear_client: bool = False) -> None:
-        """Disconnect from inverter (internal, caller must hold _modbus_lock)."""
-        if self._client is not None:
-            _LOGGER.debug(
-                (
-                    f"Disconnecting from {self._host}:{self._port} "
-                    f"(clear_client={clear_client})."
-                )
-            )
-            self._client.close()
-
-            if clear_client:
-                self._client = None
+        await self._transport.connect()
 
     async def disconnect(self, clear_client: bool = False) -> None:
         """Disconnect from inverter."""
-        if self._lock_holder is asyncio.current_task():
-            self._disconnect_unlocked(clear_client)
-            return
-        async with self._modbus_lock:
-            self._disconnect_unlocked(clear_client)
+        await self._transport.disconnect(clear_client)
 
     async def shutdown(self) -> None:
         """Shut down the hub and disconnect."""
@@ -786,23 +746,8 @@ class SolarEdgeModbusMultiHub:
         self.online = False
         await self.disconnect(clear_client=True)
 
-    async def _read_registers_unlocked(self, unit, address, rcount):
-        """Read modbus registers (internal, caller must hold _modbus_lock)."""
-
-        if _LOGGER.isEnabledFor(logging.DEBUG):
-            _LOGGER.debug(
-                f"I{unit}: modbus_read_holding_registers "
-                f"address={address} count={rcount}"
-            )
-
-        if self._use_device_id_param:
-            result = await self._client.read_holding_registers(
-                address=address, count=rcount, device_id=unit
-            )
-        else:
-            result = await self._client.read_holding_registers(
-                address=address, count=rcount, slave=unit
-            )
+    def _validate_read_result(self, unit, address, rcount, result):
+        """Map error responses to exceptions and enforce the register count."""
 
         if _LOGGER.isEnabledFor(logging.DEBUG):
             _LOGGER.debug(f"I{unit}: result is error: {result.isError()} ")
@@ -846,51 +791,31 @@ class SolarEdgeModbusMultiHub:
     async def modbus_read_holding_registers(self, unit, address, rcount):
         """Read modbus registers from inverter."""
 
-        if self._lock_holder is asyncio.current_task():
-            return await self._read_registers_unlocked(unit, address, rcount)
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                f"I{unit}: modbus_read_holding_registers "
+                f"address={address} count={rcount}"
+            )
 
-        async with self._modbus_lock:
-            self._lock_holder = asyncio.current_task()
-            try:
-                return await self._read_registers_unlocked(unit, address, rcount)
-            finally:
-                self._lock_holder = None
+        result = await self._transport.read_holding_registers_raw(unit, address, rcount)
+        return self._validate_read_result(unit, address, rcount, result)
 
     async def _poll_device_with_lock(self, device) -> None:
-        """Poll a single device while holding the modbus lock.
+        """Poll a single device while holding the modbus session.
 
-        Holds the lock for the entire device read cycle, ensuring all
+        Holds the session for the entire device read cycle, ensuring all
         registers for one unit_id are read atomically before moving to
         the next device. This prevents Modbus transaction ID confusion
         when SolarEdge firmware returns incorrect unit_id in responses.
         """
-        async with self._modbus_lock:
-            self._lock_holder = asyncio.current_task()
-            try:
-                await device.read_modbus_data()
-            finally:
-                self._lock_holder = None
+        async with self._transport.hold_session():
+            await device.read_modbus_data()
 
     async def write_registers(self, unit: int, address: int, payload) -> None:
         """Write modbus registers to inverter."""
 
         try:
-            async with self._modbus_lock:
-                if not self.is_connected:
-                    await self._connect_unlocked()
-
-                if self._use_device_id_param:
-                    result = await self._client.write_registers(
-                        address=address,
-                        values=payload,
-                        device_id=unit,
-                    )
-                else:
-                    result = await self._client.write_registers(
-                        address=address,
-                        values=payload,
-                        slave=unit,
-                    )
+            result = await self._transport.write_registers_raw(unit, address, payload)
 
         except ModbusIOException as e:
             await self.disconnect()
@@ -1093,10 +1018,30 @@ class SolarEdgeModbusMultiHub:
     @property
     def is_connected(self) -> bool:
         """Check modbus client connection status."""
-        if self._client is None:
-            return False
+        return self._transport.connected
 
-        return self._client.connected
+    # Compatibility passthroughs: the client and session lock live in the
+    # transport now, but tests (and any external code) still reach them
+    # through the hub.
+    @property
+    def _client(self):
+        return self._transport._client
+
+    @_client.setter
+    def _client(self, value) -> None:
+        self._transport._client = value
+
+    @property
+    def _modbus_lock(self) -> asyncio.Lock:
+        return self._transport._lock
+
+    @property
+    def _lock_holder(self):
+        return self._transport._lock_holder
+
+    @_lock_holder.setter
+    def _lock_holder(self, value) -> None:
+        self._transport._lock_holder = value
 
 
 class SolarEdgeInverter:
