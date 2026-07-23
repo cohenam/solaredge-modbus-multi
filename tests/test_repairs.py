@@ -579,3 +579,219 @@ class TestRepairFlowIntegration:
             result = await flow.async_step_confirm(user_input=valid_input)
 
         assert result["type"] == "create_entry"
+
+
+# Issue scoping tests: ids embed entry_id (and inverter unit for the
+# detection timeouts) so multiple hubs and inverters cannot collide.
+
+
+class TestIssueScoping:
+    """Repair issues are scoped per entry and per inverter."""
+
+    async def test_issue_ids_scoped_per_entry(
+        self, hass: HomeAssistant, mock_modbus_client, mock_config_entry_options
+    ) -> None:
+        """Two hubs create distinct issues; one hub's recovery keeps the other's."""
+        from homeassistant.helpers import issue_registry as ir
+
+        from custom_components.solaredge_modbus_multi.hub import (
+            DataUpdateFailed,
+            SolarEdgeModbusMultiHub,
+            check_config_issue_id,
+        )
+
+        hass.data.setdefault(DOMAIN, {})
+        hass.data[DOMAIN]["yaml"] = {}
+
+        def make_hub(entry_id: str, host: str) -> SolarEdgeModbusMultiHub:
+            hub = SolarEdgeModbusMultiHub(
+                hass,
+                entry_id=entry_id,
+                entry_data={
+                    CONF_HOST: host,
+                    CONF_PORT: 1502,
+                    CONF_NAME: f"Test {entry_id}",
+                    ConfName.DEVICE_LIST: [1],
+                },
+                entry_options=dict(mock_config_entry_options),
+            )
+            hub.initalized = True
+            hub._keep_modbus_open = True
+            return hub
+
+        hub_a = make_hub("entry_a", "192.168.1.100")
+        hub_b = make_hub("entry_b", "192.168.1.101")
+
+        client = mock_modbus_client.return_value
+        client.connected = False
+
+        registry = ir.async_get(hass)
+
+        with patch(
+            "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+            mock_modbus_client,
+        ):
+            for hub in (hub_a, hub_b):
+                with pytest.raises(DataUpdateFailed):
+                    await hub.async_refresh_modbus_data()
+
+            issue_a = check_config_issue_id("entry_a")
+            issue_b = check_config_issue_id("entry_b")
+            assert registry.async_get_issue(DOMAIN, issue_a) is not None
+            assert registry.async_get_issue(DOMAIN, issue_b) is not None
+
+            # Hub A recovers; only A's issue may disappear.
+            client.connected = True
+            await hub_a.async_refresh_modbus_data()
+
+        assert registry.async_get_issue(DOMAIN, issue_a) is None
+        assert registry.async_get_issue(DOMAIN, issue_b) is not None
+
+    async def test_detect_timeout_issue_per_inverter_and_recovery(
+        self,
+        hass: HomeAssistant,
+        mock_modbus_client,
+        mock_config_entry_data,
+        mock_config_entry_options,
+    ) -> None:
+        """A GPC detection timeout creates a per-inverter issue; success clears it."""
+        from homeassistant.helpers import issue_registry as ir
+
+        from custom_components.solaredge_modbus_multi.hub import (
+            SolarEdgeInverter,
+            SolarEdgeModbusMultiHub,
+            detect_timeout_issue_id,
+        )
+        from tests.test_decode_golden import build_synergy_full_space, make_side_effect
+
+        hass.data.setdefault(DOMAIN, {})
+        hass.data[DOMAIN]["yaml"] = {}
+
+        hub = SolarEdgeModbusMultiHub(
+            hass,
+            entry_id="entry_gpc",
+            entry_data=dict(mock_config_entry_data),
+            entry_options={
+                **mock_config_entry_options,
+                ConfName.DETECT_EXTRAS: True,
+            },
+        )
+
+        calls: list[tuple[int, int]] = []
+        base_side_effect = make_side_effect(build_synergy_full_space(), {}, calls)
+        gpc_times_out = True
+
+        def side_effect(*args, **kwargs):
+            address = kwargs.get("address", args[0] if args else 0)
+            if address == 61440 and gpc_times_out:
+                raise TimeoutError
+            return base_side_effect(*args, **kwargs)
+
+        client = mock_modbus_client.return_value
+        client.read_holding_registers.side_effect = side_effect
+
+        registry = ir.async_get(hass)
+        issue_id = detect_timeout_issue_id("gpc", "entry_gpc", 1)
+
+        with patch(
+            "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+            mock_modbus_client,
+        ):
+            await hub.connect()
+            inverter = SolarEdgeInverter(device_id=1, hub=hub)
+            await inverter.init_device()
+
+            hub.slow_poll_due = True
+            await inverter.read_modbus_data()
+            assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+            gpc_times_out = False
+            hub.slow_poll_due = True
+            await inverter.read_modbus_data()
+            assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+    async def test_unload_and_remove_delete_entry_issues(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Unload and removal both clear all of the entry's scoped issues."""
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from homeassistant.helpers import issue_registry as ir
+
+        from custom_components.solaredge_modbus_multi import (
+            async_remove_entry,
+            async_unload_entry,
+        )
+        from custom_components.solaredge_modbus_multi.hub import (
+            check_config_issue_id,
+            detect_timeout_issue_id,
+        )
+
+        registry = ir.async_get(hass)
+
+        def create_all(entry_id: str) -> list[str]:
+            issue_ids = [check_config_issue_id(entry_id)]
+            for unit in (1, 2):
+                for kind in ("gpc", "apc"):
+                    issue_ids.append(detect_timeout_issue_id(kind, entry_id, unit))
+            for issue_id in issue_ids:
+                ir.async_create_issue(
+                    hass,
+                    DOMAIN,
+                    issue_id,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.WARNING,
+                    translation_key="detect_timeout_gpc",
+                    data={"entry_id": entry_id},
+                )
+            return issue_ids
+
+        def make_entry(entry_id: str) -> MagicMock:
+            entry = MagicMock()
+            entry.entry_id = entry_id
+            entry.data = {ConfName.DEVICE_LIST: [1, 2]}
+            hub = MagicMock()
+            hub.shutdown = AsyncMock()
+            entry.runtime_data = SimpleNamespace(hub=hub)
+            return entry
+
+        unload_ids = create_all("unload_entry")
+        with patch.object(
+            hass.config_entries,
+            "async_unload_platforms",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            assert await async_unload_entry(hass, make_entry("unload_entry")) is True
+        for issue_id in unload_ids:
+            assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+        remove_ids = create_all("removed_entry")
+        await async_remove_entry(hass, make_entry("removed_entry"))
+        for issue_id in remove_ids:
+            assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+    async def test_setup_sweeps_legacy_issue_ids(self, hass: HomeAssistant) -> None:
+        """async_setup garbage-collects the pre-scoping global issue ids."""
+        from homeassistant.helpers import issue_registry as ir
+
+        from custom_components.solaredge_modbus_multi import async_setup
+        from custom_components.solaredge_modbus_multi.hub import LEGACY_ISSUE_IDS
+
+        registry = ir.async_get(hass)
+        for legacy_id in LEGACY_ISSUE_IDS:
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                legacy_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="detect_timeout_gpc",
+                data={"entry_id": "legacy"},
+            )
+
+        assert await async_setup(hass, {}) is True
+
+        for legacy_id in LEGACY_ISSUE_IDS:
+            assert registry.async_get_issue(DOMAIN, legacy_id) is None

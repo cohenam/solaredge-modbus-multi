@@ -118,5 +118,7 @@ async def async_create_fix_flow(
     entry_id = cast(str, data["entry_id"])
 
     if (entry := hass.config_entries.async_get_entry(entry_id)) is not None:
-        if issue_id == "check_configuration":
+        # Ids are scoped per entry ("check_configuration_<entry_id>"); the
+        # bare legacy id is still dispatched for issues created pre-upgrade.
+        if issue_id.startswith("check_configuration"):
             return CheckConfigurationRepairFlow(entry)

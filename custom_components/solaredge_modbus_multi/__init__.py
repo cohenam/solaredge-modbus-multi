@@ -12,12 +12,19 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, ConfDefaultInt, ConfName, RetrySettings
-from .hub import DataUpdateFailed, HubInitFailed, SolarEdgeModbusMultiHub
+from .hub import (
+    LEGACY_ISSUE_IDS,
+    DataUpdateFailed,
+    HubInitFailed,
+    SolarEdgeModbusMultiHub,
+    async_delete_entry_issues,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -92,6 +99,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN]["yaml"] = config.get(DOMAIN, {})
 
+    # One-time sweep of pre-scoping global issue ids left by an upgrade.
+    for legacy_issue_id in LEGACY_ISSUE_IDS:
+        ir.async_delete_issue(hass, DOMAIN, legacy_issue_id)
+
     return True
 
 
@@ -144,8 +155,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: SolarEdgeConfigEntry) -
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         await entry.runtime_data.hub.shutdown()
+        async_delete_entry_issues(hass, entry)
 
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: SolarEdgeConfigEntry) -> None:
+    """Clean up after a removed config entry.
+
+    An entry removed while in setup-retry (the usual state behind a live
+    check_configuration repair) is never unloaded, so its issues must be
+    deleted here or they orphan.
+    """
+    async_delete_entry_issues(hass, entry)
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:

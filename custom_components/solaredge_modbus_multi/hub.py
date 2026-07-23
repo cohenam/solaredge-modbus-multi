@@ -182,6 +182,33 @@ def drop_decoded(decoded: dict, keys) -> None:
         decoded.pop(key, None)
 
 
+def check_config_issue_id(entry_id: str) -> str:
+    """Repair issue id for connect/configuration failures, scoped per entry."""
+    return f"check_configuration_{entry_id}"
+
+
+def detect_timeout_issue_id(kind: str, entry_id: str, inverter_unit_id: int) -> str:
+    """Repair issue id for a control-block detection timeout, per inverter."""
+    return f"detect_timeout_{kind}_{entry_id}_{inverter_unit_id}"
+
+
+# Pre-scoping ids: one shared issue per kind for ALL entries and inverters,
+# so two hubs (or two inverters) collided on create/delete. Swept on setup.
+LEGACY_ISSUE_IDS = ("check_configuration", "detect_timeout_gpc", "detect_timeout_apc")
+
+
+def async_delete_entry_issues(hass, entry) -> None:
+    """Remove every repair issue belonging to a config entry."""
+    ir.async_delete_issue(hass, DOMAIN, check_config_issue_id(entry.entry_id))
+    for inverter_unit_id in entry.data.get(ConfName.DEVICE_LIST, []):
+        for kind in ("gpc", "apc"):
+            ir.async_delete_issue(
+                hass,
+                DOMAIN,
+                detect_timeout_issue_id(kind, entry.entry_id, inverter_unit_id),
+            )
+
+
 pymodbus_version = importlib.metadata.version("pymodbus")
 
 
@@ -392,7 +419,7 @@ class SolarEdgeModbusMultiHub:
             ir.async_create_issue(
                 self._hass,
                 DOMAIN,
-                "check_configuration",
+                check_config_issue_id(self._entry_id),
                 is_fixable=True,
                 severity=ir.IssueSeverity.ERROR,
                 translation_key="check_configuration",
@@ -582,7 +609,7 @@ class SolarEdgeModbusMultiHub:
                 ir.async_create_issue(
                     self._hass,
                     DOMAIN,
-                    "check_configuration",
+                    check_config_issue_id(self._entry_id),
                     is_fixable=True,
                     severity=ir.IssueSeverity.ERROR,
                     translation_key="check_configuration",
@@ -590,7 +617,9 @@ class SolarEdgeModbusMultiHub:
                 )
                 raise HubInitFailed(f"Setup failed: {e}")
 
-            ir.async_delete_issue(self._hass, DOMAIN, "check_configuration")
+            ir.async_delete_issue(
+                self._hass, DOMAIN, check_config_issue_id(self._entry_id)
+            )
 
             if not self.keep_modbus_open:
                 await self.disconnect()
@@ -602,7 +631,7 @@ class SolarEdgeModbusMultiHub:
             ir.async_create_issue(
                 self._hass,
                 DOMAIN,
-                "check_configuration",
+                check_config_issue_id(self._entry_id),
                 is_fixable=True,
                 severity=ir.IssueSeverity.ERROR,
                 translation_key="check_configuration",
@@ -613,7 +642,9 @@ class SolarEdgeModbusMultiHub:
             )
 
         if not self.online:
-            ir.async_delete_issue(self._hass, DOMAIN, "check_configuration")
+            ir.async_delete_issue(
+                self._hass, DOMAIN, check_config_issue_id(self._entry_id)
+            )
 
         self.online = True
 
@@ -1580,9 +1611,23 @@ class SolarEdgeInverter:
                     )
 
                     self.global_power_control = True
+                    ir.async_delete_issue(
+                        self.hub._hass,
+                        DOMAIN,
+                        detect_timeout_issue_id(
+                            "gpc", self.hub._entry_id, self.inverter_unit_id
+                        ),
+                    )
 
             except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
                 self.global_power_control = False
+                ir.async_delete_issue(
+                    self.hub._hass,
+                    DOMAIN,
+                    detect_timeout_issue_id(
+                        "gpc", self.hub._entry_id, self.inverter_unit_id
+                    ),
+                )
                 drop_decoded(self.decoded_model, GPC_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: global power control NOT available"
@@ -1592,7 +1637,9 @@ class SolarEdgeInverter:
                 ir.async_create_issue(
                     self.hub._hass,
                     DOMAIN,
-                    "detect_timeout_gpc",
+                    detect_timeout_issue_id(
+                        "gpc", self.hub._entry_id, self.inverter_unit_id
+                    ),
                     is_fixable=False,
                     severity=ir.IssueSeverity.WARNING,
                     translation_key="detect_timeout_gpc",
@@ -1732,9 +1779,23 @@ class SolarEdgeInverter:
                     )
 
                     self.advanced_power_control = True
+                    ir.async_delete_issue(
+                        self.hub._hass,
+                        DOMAIN,
+                        detect_timeout_issue_id(
+                            "apc", self.hub._entry_id, self.inverter_unit_id
+                        ),
+                    )
 
             except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
                 self.advanced_power_control = False
+                ir.async_delete_issue(
+                    self.hub._hass,
+                    DOMAIN,
+                    detect_timeout_issue_id(
+                        "apc", self.hub._entry_id, self.inverter_unit_id
+                    ),
+                )
                 drop_decoded(self.decoded_model, APC_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: advanced power control NOT available"
@@ -1744,7 +1805,9 @@ class SolarEdgeInverter:
                 ir.async_create_issue(
                     self.hub._hass,
                     DOMAIN,
-                    "detect_timeout_apc",
+                    detect_timeout_issue_id(
+                        "apc", self.hub._entry_id, self.inverter_unit_id
+                    ),
                     is_fixable=False,
                     severity=ir.IssueSeverity.WARNING,
                     translation_key="detect_timeout_apc",
