@@ -3,11 +3,13 @@ from __future__ import annotations
 import datetime
 import logging
 import re
+from dataclasses import dataclass
 
 from awesomeversion import AwesomeVersion
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
+    SensorEntityDescription,
     SensorStateClass,
 )
 from homeassistant.const import (
@@ -50,6 +52,17 @@ from .entity import SolarEdgeEntityBase
 from .helpers import float_to_hex, is_float32_not_impl, update_accum
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, kw_only=True)
+class SolarEdgeSensorEntityDescription(SensorEntityDescription):
+    """Describes a SolarEdge sensor with integration-specific extras.
+
+    model_key: decoded_model register backing the sensor, for shared bases
+    whose value/availability logic only differs by register.
+    """
+
+    model_key: str | None = None
 
 
 def _import_export_icon(phase: str | None) -> str | None:
@@ -263,6 +276,39 @@ async def async_setup_entry(
 
 
 class SolarEdgeSensorBase(SolarEdgeEntityBase, SensorEntity):
+    """Base sensor: static metadata comes from the entity_description.
+
+    unique_id and name default to a `{uid_base}_{key}[_{phase}]` scheme;
+    classes with legacy id patterns override the _description_* hooks so
+    existing registry entries and statistics are preserved.
+    """
+
+    entity_description: SolarEdgeSensorEntityDescription
+
+    def __init__(self, platform, config_entry, coordinator, phase: str = None):
+        super().__init__(platform, config_entry, coordinator)
+
+        self._phase = phase
+
+        description = getattr(self, "entity_description", None)
+        if description is not None:
+            self._attr_unique_id = self._description_unique_id(description)
+            self._attr_name = self._description_name(description)
+
+    def _description_unique_id(
+        self, description: SolarEdgeSensorEntityDescription
+    ) -> str:
+        if self._phase is None:
+            return f"{self._platform.uid_base}_{description.key}"
+
+        return f"{self._platform.uid_base}_{description.key}_{self._phase.lower()}"
+
+    def _description_name(self, description: SolarEdgeSensorEntityDescription) -> str:
+        if self._phase is None:
+            return description.name
+
+        return f"{description.name} {self._phase.upper()}"
+
     def scale_factor(self, x: int, y: int):
         return x * (10**y)
 
@@ -301,12 +347,11 @@ class SolarEdgeSensorBase(SolarEdgeEntityBase, SensorEntity):
 
 
 class SolarEdgeDevice(SolarEdgeSensorBase):
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_name = "Device"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_device"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="device",
+        name="Device",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    )
 
     @property
     def native_value(self):
@@ -376,12 +421,11 @@ class SolarEdgeDevice(SolarEdgeSensorBase):
 
 
 class Version(SolarEdgeSensorBase):
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_name = "Version"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_version"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="version",
+        name="Version",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    )
 
     @property
     def native_value(self):
@@ -389,14 +433,16 @@ class Version(SolarEdgeSensorBase):
 
 
 class ACCurrentSensor(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.CURRENT
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="ac_current",
+        name="AC Current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+    )
 
     def __init__(self, platform, config_entry, coordinator, phase: str = None):
-        super().__init__(platform, config_entry, coordinator)
-
-        self._phase = phase
+        super().__init__(platform, config_entry, coordinator, phase)
 
         if self._platform.decoded_model["C_SunSpec_DID"] in [101, 102, 103]:
             self.SUNSPEC_NOT_IMPL = SunSpecNotImpl.UINT16
@@ -407,15 +453,6 @@ class ACCurrentSensor(SolarEdgeSensorBase):
                 "ACCurrentSensor C_SunSpec_DID "
                 f"{self._platform.decoded_model['C_SunSpec_DID']}"
             )
-
-        if self._phase is None:
-            self._attr_unique_id = f"{self._platform.uid_base}_ac_current"
-            self._attr_name = "AC Current"
-        else:
-            self._attr_unique_id = (
-                f"{self._platform.uid_base}_ac_current_{self._phase.lower()}"
-            )
-            self._attr_name = f"AC Current {self._phase.upper()}"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -451,14 +488,16 @@ class ACCurrentSensor(SolarEdgeSensorBase):
 
 
 class VoltageSensor(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.VOLTAGE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="ac_voltage",
+        name="AC Voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+    )
 
     def __init__(self, platform, config_entry, coordinator, phase: str = None):
-        super().__init__(platform, config_entry, coordinator)
-
-        self._phase = phase
+        super().__init__(platform, config_entry, coordinator, phase)
 
         if self._platform.decoded_model["C_SunSpec_DID"] in [101, 102, 103]:
             self.SUNSPEC_NOT_IMPL = SunSpecNotImpl.UINT16
@@ -469,15 +508,6 @@ class VoltageSensor(SolarEdgeSensorBase):
                 "ACCurrentSensor C_SunSpec_DID "
                 f"{self._platform.decoded_model['C_SunSpec_DID']}"
             )
-
-        if self._phase is None:
-            self._attr_unique_id = f"{self._platform.uid_base}_ac_voltage"
-            self._attr_name = "AC Voltage"
-        else:
-            self._attr_unique_id = (
-                f"{self._platform.uid_base}_ac_voltage_{self._phase.lower()}"
-            )
-            self._attr_name = f"AC Voltage {self._phase.upper()}"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -518,24 +548,14 @@ class VoltageSensor(SolarEdgeSensorBase):
 
 
 class ACPower(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.POWER
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfPower.WATT
-    _attr_icon = "mdi:solar-power"
-
-    def __init__(self, platform, config_entry, coordinator, phase: str = None):
-        super().__init__(platform, config_entry, coordinator)
-
-        self._phase = phase
-
-        if self._phase is None:
-            self._attr_unique_id = f"{self._platform.uid_base}_ac_power"
-            self._attr_name = "AC Power"
-        else:
-            self._attr_unique_id = (
-                f"{self._platform.uid_base}_ac_power_{self._phase.lower()}"
-            )
-            self._attr_name = f"AC Power {self._phase.upper()}"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="ac_power",
+        name="AC Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        icon="mdi:solar-power",
+    )
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -590,11 +610,13 @@ class ACPowerInverted(ACPower):
     SolarEdge meters use opposite convention. This class negates values.
     """
 
-    def __init__(self, platform, config_entry, coordinator, phase: str = None):
-        super().__init__(platform, config_entry, coordinator, phase)
+    def _description_unique_id(
+        self, description: SolarEdgeSensorEntityDescription
+    ) -> str:
+        return f"{super()._description_unique_id(description)}_inverted"
 
-        self._attr_unique_id = f"{self._attr_unique_id}_inverted"
-        self._attr_name = f"{self._attr_name} Inverted"
+    def _description_name(self, description: SolarEdgeSensorEntityDescription) -> str:
+        return f"{super()._description_name(description)} Inverted"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -607,14 +629,13 @@ class ACPowerInverted(ACPower):
 
 
 class ACFrequency(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.FREQUENCY
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfFrequency.HERTZ
-    _attr_name = "AC Frequency"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_ac_frequency"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="ac_frequency",
+        name="AC Frequency",
+        device_class=SensorDeviceClass.FREQUENCY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfFrequency.HERTZ,
+    )
 
     @property
     def native_value(self):
@@ -628,24 +649,14 @@ class ACFrequency(SolarEdgeSensorBase):
 
 
 class ACVoltAmp(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.APPARENT_POWER
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfApparentPower.VOLT_AMPERE
-    _attr_entity_registry_enabled_default = False
-
-    def __init__(self, platform, config_entry, coordinator, phase: str = None):
-        super().__init__(platform, config_entry, coordinator)
-
-        self._phase = phase
-
-        if self._phase is None:
-            self._attr_unique_id = f"{self._platform.uid_base}_ac_va"
-            self._attr_name = "AC Apparent Power"
-        else:
-            self._attr_unique_id = (
-                f"{self._platform.uid_base}_ac_va_{self._phase.lower()}"
-            )
-            self._attr_name = f"AC Apparent Power {self._phase.upper()}"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="ac_va",
+        name="AC Apparent Power",
+        device_class=SensorDeviceClass.APPARENT_POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfApparentPower.VOLT_AMPERE,
+        entity_registry_enabled_default=False,
+    )
 
     @property
     def native_value(self):
@@ -662,24 +673,14 @@ class ACVoltAmp(SolarEdgeSensorBase):
 
 
 class ACVoltAmpReactive(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.REACTIVE_POWER
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfReactivePower.VOLT_AMPERE_REACTIVE
-    _attr_entity_registry_enabled_default = False
-
-    def __init__(self, platform, config_entry, coordinator, phase: str = None):
-        super().__init__(platform, config_entry, coordinator)
-
-        self._phase = phase
-
-        if self._phase is None:
-            self._attr_unique_id = f"{self._platform.uid_base}_ac_var"
-            self._attr_name = "AC Reactive Power"
-        else:
-            self._attr_unique_id = (
-                f"{self._platform.uid_base}_ac_var_{self._phase.lower()}"
-            )
-            self._attr_name = f"AC Reactive Power {self._phase.upper()}"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="ac_var",
+        name="AC Reactive Power",
+        device_class=SensorDeviceClass.REACTIVE_POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfReactivePower.VOLT_AMPERE_REACTIVE,
+        entity_registry_enabled_default=False,
+    )
 
     @property
     def native_value(self):
@@ -696,24 +697,14 @@ class ACVoltAmpReactive(SolarEdgeSensorBase):
 
 
 class ACPowerFactor(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.POWER_FACTOR
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = PERCENTAGE
-    _attr_entity_registry_enabled_default = False
-
-    def __init__(self, platform, config_entry, coordinator, phase: str = None):
-        super().__init__(platform, config_entry, coordinator)
-
-        self._phase = phase
-
-        if self._phase is None:
-            self._attr_unique_id = f"{self._platform.uid_base}_ac_pf"
-            self._attr_name = "AC Power Factor"
-        else:
-            self._attr_unique_id = (
-                f"{self._platform.uid_base}_ac_pf_{self._phase.lower()}"
-            )
-            self._attr_name = f"AC Power Factor {self._phase.upper()}"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="ac_pf",
+        name="AC Power Factor",
+        device_class=SensorDeviceClass.POWER_FACTOR,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        entity_registry_enabled_default=False,
+    )
 
     @property
     def native_value(self):
@@ -732,16 +723,19 @@ class ACPowerFactor(SolarEdgeSensorBase):
 class SolarEdgeACEnergy(SolarEdgeSensorBase):
     """SolarEdge sensor for AC Energy watt-hour meters."""
 
-    _attr_device_class = SensorDeviceClass.ENERGY
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
-    _attr_suggested_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-    _attr_suggested_display_precision = 3
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="ac_energy_kwh",
+        name="AC Energy",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        suggested_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=3,
+    )
 
     def __init__(self, platform, config_entry, coordinator, phase: str = None):
-        super().__init__(platform, config_entry, coordinator)
+        super().__init__(platform, config_entry, coordinator, phase)
 
-        self._phase = phase
         self._last = None
         self._value = None
         self._log_once = False
@@ -753,17 +747,22 @@ class SolarEdgeACEnergy(SolarEdgeSensorBase):
 
         self._attr_icon = _import_export_icon(self._phase)
 
-        # older versions of the integration converted to kWh internally
-        # before home assistant had UI configurable units and precision
-        # changing the unique_id now would cause new entities to be created
+    # older versions of the integration converted to kWh internally
+    # before home assistant had UI configurable units and precision
+    # changing the unique_id now would cause new entities to be created
+    def _description_unique_id(
+        self, description: SolarEdgeSensorEntityDescription
+    ) -> str:
         if self._phase is None:
-            self._attr_unique_id = f"{self._platform.uid_base}_ac_energy_kwh"
-            self._attr_name = "AC Energy"
-        else:
-            self._attr_unique_id = (
-                f"{self._platform.uid_base}_{self._phase.lower()}_kwh"
-            )
-            self._attr_name = f"AC Energy {re.sub('_', ' ', self._phase)}"
+            return f"{self._platform.uid_base}_{description.key}"
+
+        return f"{self._platform.uid_base}_{self._phase.lower()}_kwh"
+
+    def _description_name(self, description: SolarEdgeSensorEntityDescription) -> str:
+        if self._phase is None:
+            return description.name
+
+        return f"{description.name} {re.sub('_', ' ', self._phase)}"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -836,15 +835,14 @@ class SolarEdgeACEnergy(SolarEdgeSensorBase):
 class DCCurrent(SolarEdgeSensorBase):
     """DC Current for a SolarEdge inverter."""
 
-    _attr_device_class = SensorDeviceClass.CURRENT
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
-    _attr_icon = "mdi:current-dc"
-    _attr_name = "DC Current"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_dc_current"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="dc_current",
+        name="DC Current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        icon="mdi:current-dc",
+    )
 
     @property
     def available(self) -> bool:
@@ -873,20 +871,32 @@ class DCCurrent(SolarEdgeSensorBase):
         return self.sf_precision(self._platform.decoded_model, "I_DC_Current_SF")
 
 
-class SolarEdgeDCCurrentMMPPT(SolarEdgeSensorBase):
+class SolarEdgeMMPPTSensorBase(SolarEdgeSensorBase):
+    """Sensor on a Synergy MMPPT unit.
+
+    The platform is the MMPPT unit; ids derive from the parent inverter's
+    uid_base with the unit number appended to the description key.
+    """
+
+    def _description_unique_id(
+        self, description: SolarEdgeSensorEntityDescription
+    ) -> str:
+        return (
+            f"{self._platform.inverter.uid_base}_{description.key}{self._platform.unit}"
+        )
+
+
+class SolarEdgeDCCurrentMMPPT(SolarEdgeMMPPTSensorBase):
     """DC Current for Synergy MMPPT units."""
 
-    _attr_device_class = SensorDeviceClass.CURRENT
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
-    _attr_icon = "mdi:current-dc"
-    _attr_name = "DC Current"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = (
-            f"{self._platform.inverter.uid_base}_dc_current_mmppt{self._platform.unit}"
-        )
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="dc_current_mmppt",
+        name="DC Current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        icon="mdi:current-dc",
+    )
 
     @property
     def available(self) -> bool:
@@ -917,14 +927,13 @@ class SolarEdgeDCCurrentMMPPT(SolarEdgeSensorBase):
 class DCVoltage(SolarEdgeSensorBase):
     """DC Voltage for a SolarEdge inverter."""
 
-    _attr_device_class = SensorDeviceClass.VOLTAGE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
-    _attr_name = "DC Voltage"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_dc_voltage"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="dc_voltage",
+        name="DC Voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+    )
 
     @property
     def native_value(self):
@@ -937,19 +946,16 @@ class DCVoltage(SolarEdgeSensorBase):
         return self.sf_precision(self._platform.decoded_model, "I_DC_Voltage_SF")
 
 
-class SolarEdgeDCVoltageMMPPT(SolarEdgeSensorBase):
+class SolarEdgeDCVoltageMMPPT(SolarEdgeMMPPTSensorBase):
     """DC Voltage for Synergy MMPPT units."""
 
-    _attr_device_class = SensorDeviceClass.VOLTAGE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
-    _attr_name = "DC Voltage"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = (
-            f"{self._platform.inverter.uid_base}_dc_voltage_mmppt{self._platform.unit}"
-        )
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="dc_voltage_mmppt",
+        name="DC Voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+    )
 
     @property
     def available(self) -> bool:
@@ -980,15 +986,14 @@ class SolarEdgeDCVoltageMMPPT(SolarEdgeSensorBase):
 class DCPower(SolarEdgeSensorBase):
     """DC Power for a SolarEdge inverter."""
 
-    _attr_device_class = SensorDeviceClass.POWER
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfPower.WATT
-    _attr_icon = "mdi:solar-power"
-    _attr_name = "DC Power"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_dc_power"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="dc_power",
+        name="DC Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        icon="mdi:solar-power",
+    )
 
     @property
     def native_value(self):
@@ -999,20 +1004,17 @@ class DCPower(SolarEdgeSensorBase):
         return self.sf_precision(self._platform.decoded_model, "I_DC_Power_SF")
 
 
-class SolarEdgeDCPowerMMPPT(SolarEdgeSensorBase):
+class SolarEdgeDCPowerMMPPT(SolarEdgeMMPPTSensorBase):
     """DC Power for Synergy MMPPT units."""
 
-    _attr_device_class = SensorDeviceClass.POWER
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfPower.WATT
-    _attr_icon = "mdi:solar-power"
-    _attr_name = "DC Power"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = (
-            f"{self._platform.inverter.uid_base}_dc_power_mmppt{self._platform.unit}"
-        )
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="dc_power_mmppt",
+        name="DC Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        icon="mdi:solar-power",
+    )
 
     @property
     def available(self) -> bool:
@@ -1043,14 +1045,13 @@ class SolarEdgeDCPowerMMPPT(SolarEdgeSensorBase):
 class HeatSinkTemperature(SolarEdgeSensorBase):
     """Heat sink temperature for a SolarEdge inverter."""
 
-    _attr_device_class = SensorDeviceClass.TEMPERATURE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-    _attr_name = "Temperature"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_temp_sink"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="temp_sink",
+        name="Temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+    )
 
     @property
     def native_value(self):
@@ -1061,20 +1062,17 @@ class HeatSinkTemperature(SolarEdgeSensorBase):
         return self.sf_precision(self._platform.decoded_model, "I_Temp_SF")
 
 
-class SolarEdgeTemperatureMMPPT(SolarEdgeSensorBase):
+class SolarEdgeTemperatureMMPPT(SolarEdgeMMPPTSensorBase):
     """Temperature for Synergy MMPPT units."""
 
-    _attr_device_class = SensorDeviceClass.TEMPERATURE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-    _attr_suggested_display_precision = 0
-    _attr_name = "Temperature"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = (
-            f"{self._platform.inverter.uid_base}_tmp_mmppt{self._platform.unit}"
-        )
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="tmp_mmppt",
+        name="Temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        suggested_display_precision=0,
+    )
 
     @property
     def available(self) -> bool:
@@ -1091,18 +1089,14 @@ class SolarEdgeTemperatureMMPPT(SolarEdgeSensorBase):
         return self._platform.inverter.decoded_model[self._platform.mmppt_key]["Tmp"]
 
 
-class SolarEdgeStatusSensor(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.ENUM
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_name = "Status"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_status"
-
-
-class SolarEdgeInverterStatus(SolarEdgeStatusSensor):
-    _attr_options = list(DEVICE_STATUS.values())
+class SolarEdgeInverterStatus(SolarEdgeSensorBase):
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="status",
+        name="Status",
+        device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        options=list(DEVICE_STATUS.values()),
+    )
 
     @property
     def native_value(self):
@@ -1136,8 +1130,14 @@ class SolarEdgeInverterStatus(SolarEdgeStatusSensor):
         return attrs
 
 
-class SolarEdgeBatteryStatus(SolarEdgeStatusSensor):
-    _attr_options = list(BATTERY_STATUS.values())
+class SolarEdgeBatteryStatus(SolarEdgeSensorBase):
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="status",
+        name="Status",
+        device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        options=list(BATTERY_STATUS.values()),
+    )
 
     @property
     def native_value(self):
@@ -1172,12 +1172,11 @@ class SolarEdgeBatteryStatus(SolarEdgeStatusSensor):
 
 
 class StatusVendor(SolarEdgeSensorBase):
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_name = "Status Vendor"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_status_vendor"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="status_vendor",
+        name="Status Vendor",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    )
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -1213,12 +1212,11 @@ class StatusVendor(SolarEdgeSensorBase):
 
 
 class StatusVendor4(SolarEdgeSensorBase):
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_name = "Status Vendor 4"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_status_vendor4"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="status_vendor4",
+        name="Status Vendor 4",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    )
 
     @property
     def available(self) -> bool:
@@ -1270,11 +1268,10 @@ class SolarEdgeGlobalPowerControlBlock(SolarEdgeSensorBase):
 
 
 class SolarEdgeRRCR(SolarEdgeGlobalPowerControlBlock):
-    _attr_name = "RRCR Status"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_rrcr"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="rrcr",
+        name="RRCR Status",
+    )
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -1323,15 +1320,14 @@ class SolarEdgeRRCR(SolarEdgeGlobalPowerControlBlock):
 class SolarEdgeActivePowerLimit(SolarEdgeGlobalPowerControlBlock):
     """Global Dynamic Power Control: Inverter Active Power Limit"""
 
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = PERCENTAGE
-    _attr_suggested_display_precision = 0
-    _attr_icon = "mdi:percent"
-    _attr_name = "Active Power Limit"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_active_power_limit"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="active_power_limit",
+        name="Active Power Limit",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        suggested_display_precision=0,
+        icon="mdi:percent",
+    )
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -1357,14 +1353,13 @@ class SolarEdgeActivePowerLimit(SolarEdgeGlobalPowerControlBlock):
 class SolarEdgeCosPhi(SolarEdgeGlobalPowerControlBlock):
     """Global Dynamic Power Control: Inverter CosPhi"""
 
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_suggested_display_precision = 1
-    _attr_icon = "mdi:angle-acute"
-    _attr_name = "CosPhi"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_cosphi"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="cosphi",
+        name="CosPhi",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        icon="mdi:angle-acute",
+    )
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -1388,12 +1383,11 @@ class SolarEdgeCosPhi(SolarEdgeGlobalPowerControlBlock):
 
 
 class MeterEvents(SolarEdgeSensorBase):
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_name = "Meter Events"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_meter_events"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="meter_events",
+        name="Meter Events",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    )
 
     @property
     def native_value(self):
@@ -1430,12 +1424,11 @@ class MeterEvents(SolarEdgeSensorBase):
 
 
 class SolarEdgeMMPPTEvents(SolarEdgeSensorBase):
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_name = "MMPPT Events"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_mmppt_events"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="mmppt_events",
+        name="MMPPT Events",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    )
 
     @property
     def available(self) -> bool:
@@ -1477,22 +1470,30 @@ class SolarEdgeMMPPTEvents(SolarEdgeSensorBase):
 
 class MeterVAhIE(SolarEdgeSensorBase):
     # No HA device class accepts VAh/varh units
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = ENERGY_VOLT_AMPERE_HOUR
-    _attr_entity_registry_enabled_default = False
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="vah",
+        name="Apparent Energy",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=ENERGY_VOLT_AMPERE_HOUR,
+        entity_registry_enabled_default=False,
+    )
 
     def __init__(self, platform, config_entry, coordinator, phase: str = None):
-        super().__init__(platform, config_entry, coordinator)
-
-        self._phase = phase
-        self.last = None
-
-        if self._phase is None:
+        if phase is None:
             raise NotImplementedError
 
-        self._attr_unique_id = f"{self._platform.uid_base}_{self._phase.lower()}_vah"
-        self._attr_name = f"Apparent Energy {re.sub('_', ' ', self._phase)}"
+        super().__init__(platform, config_entry, coordinator, phase)
+
+        self.last = None
         self._attr_icon = _import_export_icon(self._phase)
+
+    def _description_unique_id(
+        self, description: SolarEdgeSensorEntityDescription
+    ) -> str:
+        return f"{self._platform.uid_base}_{self._phase.lower()}_{description.key}"
+
+    def _description_name(self, description: SolarEdgeSensorEntityDescription) -> str:
+        return f"{description.name} {re.sub('_', ' ', self._phase)}"
 
     @property
     def native_value(self):
@@ -1531,22 +1532,30 @@ class MeterVAhIE(SolarEdgeSensorBase):
 
 class MetervarhIE(SolarEdgeSensorBase):
     # No HA device class accepts VAh/varh units
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = ENERGY_VOLT_AMPERE_REACTIVE_HOUR
-    _attr_entity_registry_enabled_default = False
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="varh",
+        name="Reactive Energy",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=ENERGY_VOLT_AMPERE_REACTIVE_HOUR,
+        entity_registry_enabled_default=False,
+    )
 
     def __init__(self, platform, config_entry, coordinator, phase: str = None):
-        super().__init__(platform, config_entry, coordinator)
-
-        self._phase = phase
-        self.last = None
-
-        if self._phase is None:
+        if phase is None:
             raise NotImplementedError
 
-        self._attr_unique_id = f"{self._platform.uid_base}_{self._phase.lower()}_varh"
-        self._attr_name = f"Reactive Energy {re.sub('_', ' ', self._phase)}"
+        super().__init__(platform, config_entry, coordinator, phase)
+
+        self.last = None
         self._attr_icon = _import_export_icon(self._phase)
+
+    def _description_unique_id(
+        self, description: SolarEdgeSensorEntityDescription
+    ) -> str:
+        return f"{self._platform.uid_base}_{self._phase.lower()}_{description.key}"
+
+    def _description_name(self, description: SolarEdgeSensorEntityDescription) -> str:
+        return f"{description.name} {re.sub('_', ' ', self._phase)}"
 
     @property
     def native_value(self):
@@ -1584,15 +1593,14 @@ class MetervarhIE(SolarEdgeSensorBase):
 
 
 class SolarEdgeBatteryAvgTemp(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.TEMPERATURE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-    _attr_suggested_display_precision = 1
-    _attr_name = "Average Temperature"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_avg_temp"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="avg_temp",
+        name="Average Temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        suggested_display_precision=1,
+    )
 
     @property
     def native_value(self):
@@ -1612,16 +1620,15 @@ class SolarEdgeBatteryAvgTemp(SolarEdgeSensorBase):
 
 
 class SolarEdgeBatteryMaxTemp(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.TEMPERATURE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-    _attr_suggested_display_precision = 1
-    _attr_name = "Max Temperature"
-    _attr_entity_registry_enabled_default = False
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_max_temp"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="max_temp",
+        name="Max Temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        suggested_display_precision=1,
+        entity_registry_enabled_default=False,
+    )
 
     @property
     def native_value(self):
@@ -1641,15 +1648,14 @@ class SolarEdgeBatteryMaxTemp(SolarEdgeSensorBase):
 
 
 class SolarEdgeBatteryVoltage(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.VOLTAGE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
-    _attr_suggested_display_precision = 2
-    _attr_name = "DC Voltage"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_dc_voltage"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="dc_voltage",
+        name="DC Voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        suggested_display_precision=2,
+    )
 
     @property
     def native_value(self):
@@ -1672,16 +1678,15 @@ class SolarEdgeBatteryVoltage(SolarEdgeSensorBase):
 
 
 class SolarEdgeBatteryCurrent(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.CURRENT
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
-    _attr_suggested_display_precision = 2
-    _attr_icon = "mdi:current-dc"
-    _attr_name = "DC Current"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_dc_current"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="dc_current",
+        name="DC Current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        suggested_display_precision=2,
+        icon="mdi:current-dc",
+    )
 
     @property
     def available(self) -> bool:
@@ -1707,16 +1712,15 @@ class SolarEdgeBatteryCurrent(SolarEdgeSensorBase):
 
 
 class SolarEdgeBatteryPower(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.POWER
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfPower.WATT
-    _attr_suggested_display_precision = 2
-    _attr_icon = "mdi:lightning-bolt"
-    _attr_name = "DC Power"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_dc_power"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="dc_power",
+        name="DC Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        suggested_display_precision=2,
+        icon="mdi:lightning-bolt",
+    )
 
     @property
     def native_value(self):
@@ -1743,11 +1747,13 @@ class SolarEdgeBatteryPower(SolarEdgeSensorBase):
 class SolarEdgeBatteryPowerInverted(SolarEdgeBatteryPower):
     """Inverted battery power sensor for HA 2025.12 energy dashboard."""
 
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
+    def _description_unique_id(
+        self, description: SolarEdgeSensorEntityDescription
+    ) -> str:
+        return f"{super()._description_unique_id(description)}_inverted"
 
-        self._attr_unique_id = f"{self._attr_unique_id}_inverted"
-        self._attr_name = f"{self._attr_name} Inverted"
+    def _description_name(self, description: SolarEdgeSensorEntityDescription) -> str:
+        return f"{super()._description_name(description)} Inverted"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -1760,13 +1766,16 @@ class SolarEdgeBatteryPowerInverted(SolarEdgeBatteryPower):
 
 
 class SolarEdgeBatteryEnergyExport(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.ENERGY
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
-    _attr_suggested_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-    _attr_suggested_display_precision = 3
-    _attr_icon = "mdi:battery-charging-20"
-    _attr_name = "Energy Export"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="energy_export",
+        name="Energy Export",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        suggested_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=3,
+        icon="mdi:battery-charging-20",
+    )
 
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
@@ -1774,7 +1783,6 @@ class SolarEdgeBatteryEnergyExport(SolarEdgeSensorBase):
         self._last = None
         self._count = 0
         self._log_once = None
-        self._attr_unique_id = f"{self._platform.uid_base}_energy_export"
 
     @property
     def native_value(self):
@@ -1843,13 +1851,16 @@ class SolarEdgeBatteryEnergyExport(SolarEdgeSensorBase):
 
 
 class SolarEdgeBatteryEnergyImport(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.ENERGY
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
-    _attr_suggested_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-    _attr_suggested_display_precision = 3
-    _attr_icon = "mdi:battery-charging-100"
-    _attr_name = "Energy Import"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="energy_import",
+        name="Energy Import",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        suggested_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=3,
+        icon="mdi:battery-charging-100",
+    )
 
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
@@ -1857,7 +1868,6 @@ class SolarEdgeBatteryEnergyImport(SolarEdgeSensorBase):
         self._last = None
         self._count = 0
         self._log_once = None
-        self._attr_unique_id = f"{self._platform.uid_base}_energy_import"
 
     @property
     def native_value(self):
@@ -1926,16 +1936,15 @@ class SolarEdgeBatteryEnergyImport(SolarEdgeSensorBase):
 
 
 class SolarEdgeBatteryMaxEnergy(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.ENERGY_STORAGE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
-    _attr_suggested_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-    _attr_suggested_display_precision = 3
-    _attr_name = "Maximum Energy"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_max_energy"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="max_energy",
+        name="Maximum Energy",
+        device_class=SensorDeviceClass.ENERGY_STORAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        suggested_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=3,
+    )
 
     @property
     def native_value(self):
@@ -1951,114 +1960,80 @@ class SolarEdgeBatteryMaxEnergy(SolarEdgeSensorBase):
             return self._platform.decoded_model["B_Energy_Max"]
 
 
+def _battery_power_limit_description(
+    key: str, name: str, model_key: str
+) -> SolarEdgeSensorEntityDescription:
+    """The battery charge/discharge power limits share all static metadata."""
+    return SolarEdgeSensorEntityDescription(
+        key=key,
+        name=name,
+        model_key=model_key,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=0,
+    )
+
+
 class SolarEdgeBatteryPowerBase(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.POWER
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfPower.WATT
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_suggested_display_precision = 0
+    """A battery power limit: a float32 register valid when >= 0."""
+
+    @property
+    def available(self):
+        if (
+            is_float32_not_impl(
+                self._platform.decoded_model[self.entity_description.model_key]
+            )
+            or self._platform.decoded_model[self.entity_description.model_key] < 0
+        ):
+            return False
+
+        return super().available
+
+    @property
+    def native_value(self):
+        return self._platform.decoded_model[self.entity_description.model_key]
 
 
 class SolarEdgeBatteryMaxChargePower(SolarEdgeBatteryPowerBase):
-    _attr_name = "Max Charge Power"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_max_charge_power"
-
-    @property
-    def available(self):
-        if (
-            is_float32_not_impl(self._platform.decoded_model["B_MaxChargePower"])
-            or self._platform.decoded_model["B_MaxChargePower"] < 0
-        ):
-            return False
-
-        return super().available
-
-    @property
-    def native_value(self):
-        return self._platform.decoded_model["B_MaxChargePower"]
+    entity_description = _battery_power_limit_description(
+        "max_charge_power", "Max Charge Power", "B_MaxChargePower"
+    )
 
 
 class SolarEdgeBatteryMaxChargePeakPower(SolarEdgeBatteryPowerBase):
-    _attr_name = "Peak Charge Power"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_max_charge_peak_power"
-
-    @property
-    def available(self):
-        if (
-            is_float32_not_impl(self._platform.decoded_model["B_MaxChargePeakPower"])
-            or self._platform.decoded_model["B_MaxChargePeakPower"] < 0
-        ):
-            return False
-
-        return super().available
-
-    @property
-    def native_value(self):
-        return self._platform.decoded_model["B_MaxChargePeakPower"]
+    entity_description = _battery_power_limit_description(
+        "max_charge_peak_power", "Peak Charge Power", "B_MaxChargePeakPower"
+    )
 
 
 class SolarEdgeBatteryMaxDischargePower(SolarEdgeBatteryPowerBase):
-    _attr_name = "Max Discharge Power"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_max_discharge_power"
-
-    @property
-    def available(self):
-        if (
-            is_float32_not_impl(self._platform.decoded_model["B_MaxDischargePower"])
-            or self._platform.decoded_model["B_MaxDischargePower"] < 0
-        ):
-            return False
-
-        return super().available
-
-    @property
-    def native_value(self):
-        return self._platform.decoded_model["B_MaxDischargePower"]
+    entity_description = _battery_power_limit_description(
+        "max_discharge_power", "Max Discharge Power", "B_MaxDischargePower"
+    )
 
 
 class SolarEdgeBatteryMaxDischargePeakPower(SolarEdgeBatteryPowerBase):
-    _attr_name = "Peak Discharge Power"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_max_discharge_peak_power"
-
-    @property
-    def available(self):
-        if (
-            is_float32_not_impl(self._platform.decoded_model["B_MaxDischargePeakPower"])
-            or self._platform.decoded_model["B_MaxDischargePeakPower"] < 0
-        ):
-            return False
-
-        return super().available
-
-    @property
-    def native_value(self):
-        return self._platform.decoded_model["B_MaxDischargePeakPower"]
+    entity_description = _battery_power_limit_description(
+        "max_discharge_peak_power", "Peak Discharge Power", "B_MaxDischargePeakPower"
+    )
 
 
 class SolarEdgeBatteryAvailableEnergy(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.ENERGY_STORAGE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
-    _attr_suggested_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-    _attr_suggested_display_precision = 3
-    _attr_name = "Available Energy"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="avail_energy",
+        name="Available Energy",
+        device_class=SensorDeviceClass.ENERGY_STORAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        suggested_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=3,
+    )
 
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
         self._log_warning = True
-        self._attr_unique_id = f"{self._platform.uid_base}_avail_energy"
 
     @property
     def native_value(self):
@@ -2087,16 +2062,15 @@ class SolarEdgeBatteryAvailableEnergy(SolarEdgeSensorBase):
 
 
 class SolarEdgeBatterySOH(SolarEdgeSensorBase):
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = PERCENTAGE
-    _attr_suggested_display_precision = 0
-    _attr_icon = "mdi:battery-heart-outline"
-    _attr_name = "State of Health"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_battery_soh"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="battery_soh",
+        name="State of Health",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        native_unit_of_measurement=PERCENTAGE,
+        suggested_display_precision=0,
+        icon="mdi:battery-heart-outline",
+    )
 
     @property
     def native_value(self):
@@ -2111,15 +2085,14 @@ class SolarEdgeBatterySOH(SolarEdgeSensorBase):
 
 
 class SolarEdgeBatterySOE(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.BATTERY
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = PERCENTAGE
-    _attr_suggested_display_precision = 0
-    _attr_name = "State of Energy"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_battery_soe"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="battery_soe",
+        name="State of Energy",
+        device_class=SensorDeviceClass.BATTERY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        suggested_display_precision=0,
+    )
 
     @property
     def native_value(self):
@@ -2142,13 +2115,12 @@ class SolarEdgeAdvancedPowerControlBlock(SolarEdgeSensorBase):
 class SolarEdgeCommitControlSettings(SolarEdgeAdvancedPowerControlBlock):
     """Entity to show the results of Commit Power Control Settings button."""
 
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_icon = "mdi:content-save-cog-outline"
-    _attr_name = "Commit Power Settings"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_commit_pwr_settings"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="commit_pwr_settings",
+        name="Commit Power Settings",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:content-save-cog-outline",
+    )
 
     @property
     def available(self) -> bool:
@@ -2184,13 +2156,12 @@ class SolarEdgeCommitControlSettings(SolarEdgeAdvancedPowerControlBlock):
 class SolarEdgeDefaultControlSettings(SolarEdgeAdvancedPowerControlBlock):
     """Entity to show the results of Restore Power Control Default Settings button."""
 
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_icon = "mdi:restore-alert"
-    _attr_name = "Default Power Settings"
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_default_pwr_settings"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="default_pwr_settings",
+        name="Default Power Settings",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:restore-alert",
+    )
 
     @property
     def available(self) -> bool:
@@ -2218,14 +2189,13 @@ class SolarEdgeDefaultControlSettings(SolarEdgeAdvancedPowerControlBlock):
 
 
 class SolarEdgeLastUpdate(SolarEdgeSensorBase):
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_name = "Last Update"
-    _attr_entity_registry_enabled_default = False
-
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-        self._attr_unique_id = f"{self._platform.uid_base}_last_update_timestamp"
+    entity_description = SolarEdgeSensorEntityDescription(
+        key="last_update_timestamp",
+        name="Last Update",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    )
 
     @property
     def available(self) -> bool:
