@@ -1192,3 +1192,42 @@ async def test_reconfigure_reloads_exactly_once(
     assert result["reason"] == "reconfigure_successful"
     assert mock_schedule.call_count + mock_reload.call_count == 1
     mock_schedule.assert_called_once_with(existing_entry.entry_id)
+
+
+async def test_manual_readd_aborts_before_any_scan(
+    hass: HomeAssistant, mock_config_entry_data
+) -> None:
+    """Re-adding a configured host must abort BEFORE opening a scanner.
+
+    SolarEdge inverters accept one Modbus/TCP session; a scan against a
+    host that a loaded entry is polling would steal or clash with it.
+    """
+    existing_entry = MockConfigEntry(
+        version=2,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Existing SolarEdge",
+        data=mock_config_entry_data,
+        source=config_entries.SOURCE_USER,
+        unique_id="192.168.1.100:1502",
+    )
+    existing_entry.add_to_hass(hass)
+
+    result = await _start_manual_flow(hass)
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.config_flow.SolarEdgeDeviceScanner"
+    ) as scanner_cls:
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Duplicate SolarEdge",
+                CONF_HOST: "192.168.1.100",
+                CONF_PORT: 1502,
+                ConfName.DEVICE_LIST: "1",
+            },
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    scanner_cls.assert_not_called()

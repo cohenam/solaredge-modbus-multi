@@ -125,6 +125,8 @@ class SolaredgeModbusMultiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         finally:
             await scanner.disconnect()
+            # Grace so the inverter releases its single Modbus/TCP slot
+            # before the integration's hub connects to it.
             await asyncio.sleep(1.0)
 
         return scan_return
@@ -270,6 +272,13 @@ class SolaredgeModbusMultiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             elif not 1 <= user_input[CONF_PORT] <= 65535:
                 errors[CONF_PORT] = "invalid_tcp_port"
             else:
+                # Abort BEFORE opening a Modbus session: SolarEdge accepts a
+                # single Modbus/TCP session, and a configured entry may be
+                # actively polling this host right now.
+                new_unique_id = f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"
+                await self.async_set_unique_id(new_unique_id)
+                self._abort_if_unique_id_configured()
+
                 scanner = SolarEdgeDeviceScanner(
                     host=user_input[CONF_HOST],
                     port=user_input[CONF_PORT],
@@ -314,19 +323,14 @@ class SolaredgeModbusMultiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if not 1 <= inverter_count <= 32:
                         errors[ConfName.DEVICE_LIST] = "invalid_inverter_count"
                     else:
-                        new_unique_id = (
-                            f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"
-                        )
-                        await self.async_set_unique_id(new_unique_id)
-
-                        self._abort_if_unique_id_configured()
-
                         return self.async_create_entry(
                             title=user_input[CONF_NAME], data=user_input
                         )
 
                 finally:
                     await scanner.disconnect()
+                    # Grace so the inverter releases its single Modbus/TCP
+                    # slot before the integration's hub connects to it.
                     await asyncio.sleep(1.0)
 
         else:

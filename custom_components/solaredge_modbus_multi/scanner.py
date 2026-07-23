@@ -1,6 +1,20 @@
 """Device ID scanner for SolarEdge Modbus Multi.
 
-Based on work by thargy: https://github.com/thargy/modbus-scanner
+Scans Modbus device IDs by reading the SunSpec common-block header
+(40000, 9 registers) and matching the SolarEdge signature: "SunS",
+DID 1, length 65, manufacturer "SolarEdge".
+
+Built on ModbusTransport (pymodbus) rather than a raw socket, so MBAP
+framing is length-aware (fragmented TCP responses are reassembled),
+transaction/unit IDs are matched by the transaction layer (a stale frame
+becomes a timeout, not a phantom "other device"), and exception PDUs are
+classified as a responding non-inverter device.
+
+Original raw-socket approach based on work by thargy:
+https://github.com/thargy/modbus-scanner
+
+The classification API is unchanged: FOUND_INV for a SolarEdge inverter,
+FOUND for any other responding Modbus device, NOT_FOUND for no response.
 """
 
 from __future__ import annotations
@@ -9,49 +23,26 @@ import asyncio
 import logging
 
 from homeassistant.exceptions import HomeAssistantError
+from pymodbus.exceptions import ConnectionException, ModbusIOException
+
+try:  # pymodbus 3.11.1+
+    from pymodbus.pdu.pdu import ExceptionResponse
+except ImportError:  # older pymodbus
+    from pymodbus.pdu import ExceptionResponse
+
+from .modbus_transport import ModbusTransport
 
 _LOGGER = logging.getLogger(__name__)
 
+SUNSPEC_COMMON_ADDRESS = 40000
+SUNSPEC_COMMON_HEADER_COUNT = 9
+SUNSPEC_ID = 0x53756E53  # "SunS"
+SUNSPEC_COMMON_DID = 0x0001
+SUNSPEC_COMMON_LENGTH = 65
+SOLAREDGE_MANUFACTURER = "SolarEdge"
+
 
 class SolarEdgeDeviceScanner:
-    # Device scanning request
-    REQUEST = [0x0, 0x0, 0x0, 0x0, 0x0, 0x6, 0x0, 0x3, 0x9C, 0x40, 0x0, 0x09]
-
-    # Device scanning response (inverter signature)
-    # 00 02 00 00 00 15 02 03 12 53 75 6e 53 00 01 00 41 53 6f 6c 61 72 45 64 67 65 20
-    RESPONSE = [
-        0x0,  # transaction high
-        0x0,  # transaction low
-        0x0,
-        0x0,
-        0x0,
-        0x15,
-        0x0,  # modbus address
-        0x3,
-        0x12,  # C_SunSpec_ID
-        0x53,  # C_SunSpec_ID
-        0x75,  # C_SunSpec_ID
-        0x6E,  # C_SunSpec_ID
-        0x53,  # C_SunSpec_ID
-        0x0,  # C_SunSpec_DID
-        0x1,  # C_SunSpec_DID
-        0x0,  # C_SunSpec_Length
-        0x41,  # C_SunSpec_Length
-        0x53,  # C_Manufacturer
-        0x6F,  # C_Manufacturer
-        0x6C,  # C_Manufacturer
-        0x61,  # C_Manufacturer
-        0x72,  # C_Manufacturer
-        0x45,  # C_Manufacturer
-        0x64,  # C_Manufacturer
-        0x67,  # C_Manufacturer
-        0x65,  # C_Manufacturer
-        0x20,
-    ]
-
-    DEVICE_ID_INDEX = 6
-    TRANS_HIGH_INDEX = 0
-    TRANS_LOW_INDEX = 1
     NOT_FOUND = 0
     FOUND = 1
     FOUND_INV = 2
@@ -69,17 +60,25 @@ class SolarEdgeDeviceScanner:
         Args:
             host: Target host address.
             port: Target port number.
-            timeout: Connection timeout in seconds.
+            connect_timeout: Connection timeout in seconds.
             scan_retries: Number of retry attempts for failed scans.
+            scan_timeout: Per-device response timeout in seconds.
         """
         self._connect_timeout = connect_timeout
         self._scan_retries = scan_retries
         self._scan_timeout = scan_timeout
         self._host = host
         self._port = port
-        self._reader = None
-        self._writer = None
-        self._transaction = 0
+        # A private session: retries=0 because this class does its own
+        # retry loop, and no auto-reconnect (reconnect happens explicitly).
+        self._transport = ModbusTransport(
+            host=host,
+            port=port,
+            timeout=scan_timeout,
+            retries=0,
+            reconnect_delay=0,
+            reconnect_delay_max=0,
+        )
 
         self.inverters = []
 
@@ -149,75 +148,50 @@ class SolarEdgeDeviceScanner:
         }
 
     async def connect(self) -> None:
-        """Establish TCP connection to the Modbus device."""
+        """Establish the Modbus/TCP session."""
         attempt = 1
 
-        while self._writer is None and attempt <= self._scan_retries:
+        while not self._transport.connected and attempt <= self._scan_retries:
             try:
-                _LOGGER.debug(f"Connecting to {self._host}:{self._port} ...")
-                self._reader, self._writer = await asyncio.wait_for(
-                    asyncio.open_connection(self._host, self._port),
-                    timeout=self._connect_timeout,
-                )
-            except asyncio.TimeoutError:
-                await self.disconnect()
-                attempt += 1
-                await asyncio.sleep(1.0)
+                async with asyncio.timeout(self._connect_timeout):
+                    await self._transport.connect()
+            except TimeoutError:
                 _LOGGER.warning(
                     f"Timeout occurred while connecting to {self._host}:{self._port}"
                 )
             except OSError as e:
-                await self.disconnect()
-                attempt += 1
-                await asyncio.sleep(1.0)
                 _LOGGER.warning(
                     f"Network error connecting to {self._host}:{self._port}: {e}"
                 )
 
-        if attempt > self._scan_retries:
+            if not self._transport.connected:
+                await self._transport.disconnect(clear_client=True)
+                attempt += 1
+                await asyncio.sleep(1.0)
+
+        if not self._transport.connected:
             raise HomeAssistantError(
-                f"Unable to connect to {self._host}:{self._port} after {attempt - 1} attempts."
+                f"Unable to connect to {self._host}:{self._port} "
+                f"after {attempt - 1} attempts."
             )
 
     async def disconnect(self) -> None:
-        """Close the TCP connection to the Modbus device."""
-        if self._writer is not None:
-            self._writer.close()
-            await self._writer.wait_closed()
-        self._writer = None
-        self._reader = None
+        """Close the Modbus/TCP session."""
+        await self._transport.disconnect(clear_client=True)
 
-    def device_is_inverter(self, request: list[int], response: list[int]) -> int:
-        """Check if device response matches SolarEdge inverter signature.
-
-        Args:
-            request: The Modbus TCP request sent to the device.
-            response: The Modbus TCP response received from the device.
-
-        Returns:
-            FOUND_INV (2) if a SolarEdge inverter was detected.
-            FOUND (1) if a non-inverter Modbus device responded.
-            NOT_FOUND (0) if the response was invalid or no device found.
-
-        Credit: https://github.com/thargy/modbus-scanner/blob/main/scan.py
-        """
-        if len(response) < 7 or len(request) < self.DEVICE_ID_INDEX:
-            return self.NOT_FOUND
-
-        expected = self.RESPONSE.copy()
-        expected[self.TRANS_HIGH_INDEX] = request[0]
-        expected[self.TRANS_LOW_INDEX] = request[1]
-        expected[self.DEVICE_ID_INDEX] = request[self.DEVICE_ID_INDEX]
-
-        index = 0
-        for a in response:
-            if index >= len(expected):
-                return self.FOUND if index >= 7 else 0
-            if a != expected[index]:
-                return self.NOT_FOUND
-            index = index + 1
-
-        return self.FOUND_INV
+    @staticmethod
+    def _is_solaredge_signature(registers: list[int]) -> bool:
+        """Match the SunSpec common-block header of a SolarEdge inverter."""
+        sunspec_id = (registers[0] << 16) | registers[1]
+        manufacturer = "".join(
+            chr(reg >> 8) + chr(reg & 0xFF) for reg in registers[4:9]
+        )
+        return (
+            sunspec_id == SUNSPEC_ID
+            and registers[2] == SUNSPEC_COMMON_DID
+            and registers[3] == SUNSPEC_COMMON_LENGTH
+            and manufacturer.startswith(SOLAREDGE_MANUFACTURER)
+        )
 
     async def scan_device_id(self, device_id: int, timeout: float = 5.0) -> int:
         """Scan a specific Modbus device ID for a SolarEdge inverter.
@@ -230,55 +204,68 @@ class SolarEdgeDeviceScanner:
             FOUND_INV (2) if a SolarEdge inverter was detected.
             FOUND (1) if a non-inverter Modbus device responded.
             NOT_FOUND (0) if no valid response was received.
-
-        Raises:
-            HomeAssistantError: If scanning fails after all retry attempts.
-
-        Credit: https://github.com/thargy/modbus-scanner/blob/main/scan.py
         """
-
-        # Update request
-        self._transaction = (self._transaction + 1) % 65536
-        request = self.REQUEST.copy()
-        request[self.TRANS_HIGH_INDEX] = int(self._transaction / 256)
-        request[self.TRANS_LOW_INDEX] = self._transaction % 256
-        request[self.DEVICE_ID_INDEX] = device_id
-
         attempt = 1
 
-        if self._writer is None:
-            await self.connect()
-
+        # Response waiting is governed by the pymodbus request timeout
+        # (scan_timeout): a silent or mismatched (stale txn / wrong unit)
+        # response surfaces as ModbusIOException after `timeout` seconds.
+        # After any failure the client is dropped and rebuilt, so every
+        # attempt starts from a clean connection state.
         while attempt <= self._scan_retries:
+            if not self._transport.connected:
+                try:
+                    async with asyncio.timeout(self._connect_timeout):
+                        await self._transport.connect()
+                except (TimeoutError, OSError, ConnectionException):
+                    await self._transport.disconnect(clear_client=True)
+                    attempt += 1
+                    continue
+
+                if not self._transport.connected:
+                    await self._transport.disconnect(clear_client=True)
+                    attempt += 1
+                    continue
+
             try:
-                self._writer.write(bytes(request))
-                await self._writer.drain()
                 _LOGGER.debug(f"Scanning ID: {device_id} ...")
+                result = await self._transport.read_holding_registers_raw(
+                    device_id, SUNSPEC_COMMON_ADDRESS, SUNSPEC_COMMON_HEADER_COUNT
+                )
 
-                async with asyncio.timeout(timeout):
-                    response = await self._reader.read(1024)
-                    result = self.device_is_inverter(request, response)
-                    if result == self.FOUND_INV:
-                        _LOGGER.debug(f" {device_id} is INVERTER")
-                        return self.FOUND_INV
-                    else:
-                        _LOGGER.warning(
-                            f"Scanned device {device_id} did not match signature: "
-                            f"{' '.join(format(x, '02x') for x in response)}"
-                        )
-
-                    _LOGGER.debug(f" Received ({len(response)} bytes)")
-                    _LOGGER.debug(f" {' '.join(format(x, '02x') for x in response)}")
-
-                    return self.FOUND
-
-            except asyncio.TimeoutError:
-                _LOGGER.debug(f" Timed out after {timeout}s")
-                attempt += 1
-
-            except OSError as e:
+            except (ConnectionException, ModbusIOException, OSError) as e:
                 _LOGGER.debug(f" FAILED: {e}")
+                await self._transport.disconnect(clear_client=True)
                 attempt += 1
+                continue
+
+            if isinstance(result, ModbusIOException):
+                _LOGGER.debug(f" No response from ID {device_id}: {result}")
+                await self._transport.disconnect(clear_client=True)
+                attempt += 1
+                continue
+
+            if isinstance(result, ExceptionResponse) or result.isError():
+                # A device answered (even if with a Modbus exception), so
+                # something real is at this ID — just not a usable inverter.
+                _LOGGER.debug(f" ID {device_id} answered with error: {result}")
+                return self.FOUND
+
+            if len(result.registers) != SUNSPEC_COMMON_HEADER_COUNT:
+                _LOGGER.debug(
+                    f" ID {device_id} short response: {len(result.registers)} regs"
+                )
+                return self.FOUND
+
+            if self._is_solaredge_signature(result.registers):
+                _LOGGER.debug(f" {device_id} is INVERTER")
+                return self.FOUND_INV
+
+            _LOGGER.debug(
+                f"Scanned device {device_id} did not match signature: "
+                f"{' '.join(format(reg, '04x') for reg in result.registers)}"
+            )
+            return self.FOUND
 
         _LOGGER.debug(f" No device found at ID {device_id}")
         return self.NOT_FOUND
