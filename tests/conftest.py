@@ -186,11 +186,13 @@ def create_io_exception_response():
     return response
 
 
-def registers_from_values(*typed_values) -> list[int]:
+def registers_from_values(*typed_values, word_order: str = "little") -> list[int]:
     """Build a register block from (value, DATATYPE) pairs.
 
     Encodes each value with the same word order the hub uses to decode,
     so tests exercise the real offset/datatype mapping instead of zeros.
+    Little word order is the default (SolarEdge proprietary blocks);
+    pass word_order="big" for standard SunSpec 32-bit values.
     """
     from pymodbus.client.mixin import ModbusClientMixin
 
@@ -198,7 +200,16 @@ def registers_from_values(*typed_values) -> list[int]:
     for value, data_type in typed_values:
         registers.extend(
             ModbusClientMixin.convert_to_registers(
-                value, data_type=data_type, word_order="little"
+                value, data_type=data_type, word_order=word_order
             )
         )
     return registers
+
+
+def string_registers(text: str, register_count: int) -> list[int]:
+    """Encode a SunSpec string field: two big-endian chars per register."""
+    padded = text.ljust(register_count * 2, "\x00")
+    return [
+        ord(padded[i]) << 8 | ord(padded[i + 1])
+        for i in range(0, register_count * 2, 2)
+    ]

@@ -1,3 +1,11 @@
 .DS_Store
 solaredge-modbus-multi.bbprojectd
 /megalinter-reports
+.venv/
+__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+# Local working notes — contain credentials, never commit
+.claude/
+DEPLOY_STATUS.md
