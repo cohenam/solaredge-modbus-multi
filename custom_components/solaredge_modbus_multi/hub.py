@@ -209,6 +209,49 @@ def async_delete_entry_issues(hass, entry) -> None:
             )
 
 
+def decode_sunspec_string(registers: list[int], word_order: str = "big") -> str:
+    """Decode a SunSpec string field from a span of UINT16 registers."""
+    return int_list_to_string(
+        ModbusClientMixin.convert_from_registers(
+            registers,
+            data_type=ModbusClientMixin.DATATYPE.UINT16,
+            word_order=word_order,
+        )
+    )
+
+
+def decode_sunspec_common_block(registers: list[int]) -> dict:
+    """Decode the SunSpec common model block shared by inverters and meters.
+
+    `registers` must start at the C_SunSpec_DID register — the inverter's
+    2-register C_SunSpec_ID header, when present, is decoded by the caller.
+    Layout: DID, Length, Manufacturer(32), Model(32), Option(16),
+    Version(16), SerialNumber(32), Device_address. Validation of the decoded
+    values stays with each caller.
+    """
+    decoded = dict(
+        zip(
+            ["C_SunSpec_DID", "C_SunSpec_Length", "C_Device_address"],
+            ModbusClientMixin.convert_from_registers(
+                registers[0:2] + [registers[66]],
+                data_type=ModbusClientMixin.DATATYPE.UINT16,
+            ),
+        )
+    )
+
+    decoded.update(
+        {
+            "C_Manufacturer": decode_sunspec_string(registers[2:18]),  # string(32)
+            "C_Model": decode_sunspec_string(registers[18:34]),  # string(32)
+            "C_Option": decode_sunspec_string(registers[34:42]),  # string(16)
+            "C_Version": decode_sunspec_string(registers[42:50]),  # string(16)
+            "C_SerialNumber": decode_sunspec_string(registers[50:66]),  # string(32)
+        }
+    )
+
+    return decoded
+
+
 pymodbus_version = importlib.metadata.version("pymodbus")
 
 
@@ -1072,65 +1115,15 @@ class SolarEdgeInverter:
                 unit=self.inverter_unit_id, address=40000, rcount=69
             )
 
+            # The inverter block has a 2-register C_SunSpec_ID header; the
+            # rest is the standard common model starting at C_SunSpec_DID.
             self.decoded_common = {
                 "C_SunSpec_ID": ModbusClientMixin.convert_from_registers(
                     inverter_data.registers[0:2],
                     data_type=ModbusClientMixin.DATATYPE.UINT32,
                 ),
+                **decode_sunspec_common_block(inverter_data.registers[2:]),
             }
-
-            uint16_fields = [
-                "C_SunSpec_DID",
-                "C_SunSpec_Length",
-                "C_Device_address",
-            ]
-            uint16_data = inverter_data.registers[2:4] + [inverter_data.registers[68]]
-            self.decoded_common.update(
-                dict(
-                    zip(
-                        uint16_fields,
-                        ModbusClientMixin.convert_from_registers(
-                            uint16_data,
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        ),
-                    )
-                )
-            )
-
-            self.decoded_common.update(
-                {
-                    "C_Manufacturer": int_list_to_string(  # string(32)
-                        ModbusClientMixin.convert_from_registers(
-                            inverter_data.registers[4:20],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        )
-                    ),
-                    "C_Model": int_list_to_string(  # string(32)
-                        ModbusClientMixin.convert_from_registers(
-                            inverter_data.registers[20:36],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        )
-                    ),
-                    "C_Option": int_list_to_string(  # string(16)
-                        ModbusClientMixin.convert_from_registers(
-                            inverter_data.registers[36:44],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        )
-                    ),
-                    "C_Version": int_list_to_string(  # string(16)
-                        ModbusClientMixin.convert_from_registers(
-                            inverter_data.registers[44:52],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        )
-                    ),
-                    "C_SerialNumber": int_list_to_string(  # string(32)
-                        ModbusClientMixin.convert_from_registers(
-                            inverter_data.registers[52:68],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        )
-                    ),
-                }
-            )
 
             for name, value in iter(self.decoded_common.items()):
                 _LOGGER.debug(
@@ -1254,11 +1247,8 @@ class SolarEdgeInverter:
             # C_Version: registers[0:8] (address 40044-40051). Static at runtime and
             # already decoded in init_device — skip the per-cycle re-decode.
             if "C_Version" not in self.decoded_common:
-                self.decoded_common["C_Version"] = int_list_to_string(
-                    ModbusClientMixin.convert_from_registers(
-                        inverter_data.registers[0:8],
-                        data_type=ModbusClientMixin.DATATYPE.UINT16,
-                    )
+                self.decoded_common["C_Version"] = decode_sunspec_string(
+                    inverter_data.registers[0:8]
                 )
 
             # Main inverter data starts at offset 25 (address 40069 - 40044 = 25)
@@ -2108,57 +2098,9 @@ class SolarEdgeMeter:
                 _LOGGER.debug(meter_info)
                 raise ModbusReadError(meter_info)
 
-            uint16_fields = [
-                "C_SunSpec_DID",
-                "C_SunSpec_Length",
-                "C_Device_address",
-            ]
-            uint16_data = meter_info.registers[0:2] + [meter_info.registers[66]]
-
-            self.decoded_common = dict(
-                zip(
-                    uint16_fields,
-                    ModbusClientMixin.convert_from_registers(
-                        uint16_data,
-                        data_type=ModbusClientMixin.DATATYPE.UINT16,
-                    ),
-                )
-            )
-
-            self.decoded_common.update(
-                {
-                    "C_Manufacturer": int_list_to_string(  # string(32)
-                        ModbusClientMixin.convert_from_registers(
-                            meter_info.registers[2:18],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        )
-                    ),
-                    "C_Model": int_list_to_string(  # string(32)
-                        ModbusClientMixin.convert_from_registers(
-                            meter_info.registers[18:34],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        )
-                    ),
-                    "C_Option": int_list_to_string(  # string(16)
-                        ModbusClientMixin.convert_from_registers(
-                            meter_info.registers[34:42],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        )
-                    ),
-                    "C_Version": int_list_to_string(  # string(16)
-                        ModbusClientMixin.convert_from_registers(
-                            meter_info.registers[42:50],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        )
-                    ),
-                    "C_SerialNumber": int_list_to_string(  # string(32)
-                        ModbusClientMixin.convert_from_registers(
-                            meter_info.registers[50:66],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        )
-                    ),
-                }
-            )
+            # Standard SunSpec common model, starting directly at C_SunSpec_DID
+            # (meters have no C_SunSpec_ID header).
+            self.decoded_common = decode_sunspec_common_block(meter_info.registers)
 
             for name, value in iter(self.decoded_common.items()):
                 _LOGGER.debug(
@@ -2416,66 +2358,33 @@ class SolarEdgeBattery:
                 unit=self.inverter_unit_id, address=self.start_address, rcount=68
             )
 
-            self.decoded_common = dict(
-                [
-                    (
-                        "B_Manufacturer",  # string(32)
-                        int_list_to_string(
-                            ModbusClientMixin.convert_from_registers(
-                                battery_info.registers[0:16],
-                                data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                word_order="little",
-                            )
-                        ),
-                    ),
-                    (
-                        "B_Model",  # string(32)
-                        int_list_to_string(
-                            ModbusClientMixin.convert_from_registers(
-                                battery_info.registers[16:32],
-                                data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                word_order="little",
-                            )
-                        ),
-                    ),
-                    (
-                        "B_Version",  # string(32)
-                        int_list_to_string(
-                            ModbusClientMixin.convert_from_registers(
-                                battery_info.registers[32:48],
-                                data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                word_order="little",
-                            )
-                        ),
-                    ),
-                    (
-                        "B_SerialNumber",  # string(32)
-                        int_list_to_string(
-                            ModbusClientMixin.convert_from_registers(
-                                battery_info.registers[48:64],
-                                data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                word_order="little",
-                            )
-                        ),
-                    ),
-                    (
-                        "B_Device_Address",
-                        ModbusClientMixin.convert_from_registers(
-                            [battery_info.registers[64]],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                            word_order="little",
-                        ),
-                    ),
-                    (
-                        "B_RatedEnergy",
-                        ModbusClientMixin.convert_from_registers(
-                            battery_info.registers[66:68],
-                            data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                            word_order="little",
-                        ),
-                    ),
-                ]
-            )
+            # Batteries use a vendor block, not the SunSpec common model:
+            # B_-prefixed names, little word order, no Option, and a
+            # trailing float32 rated-energy field.
+            self.decoded_common = {
+                "B_Manufacturer": decode_sunspec_string(  # string(32)
+                    battery_info.registers[0:16], word_order="little"
+                ),
+                "B_Model": decode_sunspec_string(  # string(32)
+                    battery_info.registers[16:32], word_order="little"
+                ),
+                "B_Version": decode_sunspec_string(  # string(32)
+                    battery_info.registers[32:48], word_order="little"
+                ),
+                "B_SerialNumber": decode_sunspec_string(  # string(32)
+                    battery_info.registers[48:64], word_order="little"
+                ),
+                "B_Device_Address": ModbusClientMixin.convert_from_registers(
+                    [battery_info.registers[64]],
+                    data_type=ModbusClientMixin.DATATYPE.UINT16,
+                    word_order="little",
+                ),
+                "B_RatedEnergy": ModbusClientMixin.convert_from_registers(
+                    battery_info.registers[66:68],
+                    data_type=ModbusClientMixin.DATATYPE.FLOAT32,
+                    word_order="little",
+                ),
+            }
 
             log_decoded(
                 f"I{self.inverter_unit_id}B{self.battery_id}", self.decoded_common
