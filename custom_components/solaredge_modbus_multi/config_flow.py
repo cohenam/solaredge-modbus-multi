@@ -532,6 +532,8 @@ class SolaredgeModbusMultiOptionsFlowHandler(OptionsFlow):
                 errors[ConfName.BATTERY_RATING_ADJUST] = "invalid_percent"
             elif user_input[ConfName.BATTERY_RATING_ADJUST] > 100:
                 errors[ConfName.BATTERY_RATING_ADJUST] = "invalid_percent"
+            elif not (0 <= user_input[ConfName.BATTERY_ENERGY_RESET_CYCLES] <= 1000):
+                errors[ConfName.BATTERY_ENERGY_RESET_CYCLES] = "invalid_reset_cycles"
             else:
                 if self.init_info[ConfName.ADV_PWR_CONTROL] is True:
                     self.init_info = {**self.init_info, **user_input}

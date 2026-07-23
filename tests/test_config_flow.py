@@ -845,6 +845,64 @@ async def test_battery_options_rating_too_high(
     assert result["errors"] == {ConfName.BATTERY_RATING_ADJUST: "invalid_percent"}
 
 
+@pytest.mark.parametrize(
+    ("reset_cycles", "valid"),
+    [(-1, False), (1001, False), (0, True), (1000, True)],
+)
+async def test_battery_options_reset_cycles_bounds(
+    hass: HomeAssistant,
+    mock_config_entry_data,
+    mock_config_entry_options,
+    reset_cycles,
+    valid,
+) -> None:
+    """Battery energy reset cycles must be within 0..1000."""
+    entry = MockConfigEntry(
+        version=2,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Test SolarEdge",
+        data=mock_config_entry_data,
+        options=mock_config_entry_options,
+        source=config_entries.SOURCE_USER,
+        unique_id="192.168.1.100:1502",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    # Navigate to battery options
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_SCAN_INTERVAL: 300,
+            ConfName.KEEP_MODBUS_OPEN: False,
+            ConfName.DETECT_METERS: True,
+            ConfName.DETECT_BATTERIES: True,
+            ConfName.DETECT_EXTRAS: False,
+            ConfName.ADV_PWR_CONTROL: False,
+            ConfName.SLEEP_AFTER_WRITE: 0,
+        },
+    )
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            ConfName.ALLOW_BATTERY_ENERGY_RESET: False,
+            ConfName.BATTERY_ENERGY_RESET_CYCLES: reset_cycles,
+            ConfName.BATTERY_RATING_ADJUST: 0,
+        },
+    )
+
+    if valid:
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+    else:
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {
+            ConfName.BATTERY_ENERGY_RESET_CYCLES: "invalid_reset_cycles"
+        }
+
+
 # Advanced power control flow tests
 async def test_adv_pwr_ctl_form_display(
     hass: HomeAssistant, mock_config_entry_data, mock_config_entry_options

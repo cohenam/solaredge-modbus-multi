@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant import config_entries
@@ -69,6 +70,51 @@ async def test_async_setup_with_yaml_config(hass: HomeAssistant) -> None:
     result = await async_setup(hass, yaml_config)
     assert result is True
     assert hass.data[DOMAIN]["yaml"] == yaml_config[DOMAIN]
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "value"),
+    [
+        # retry.limit <= 0 used to mean an infinite coordinator retry
+        # loop with unbounded backoff — now rejected at the schema.
+        ("retry", "limit", 0),
+        ("retry", "limit", -1),
+        ("retry", "limit", 101),
+        ("retry", "ratio", 0),
+        ("retry", "time", 5),
+        ("retry", "time", 60001),
+        ("modbus", "timeout", 0),
+        ("modbus", "retries", -1),
+        ("modbus", "retries", 11),
+        ("modbus", "reconnect_delay", -0.1),
+        ("modbus", "reconnect_delay_max", 601),
+    ],
+)
+def test_yaml_schema_rejects_out_of_range(section, key, value) -> None:
+    """Advanced YAML knobs are bounded; out-of-range values fail validation."""
+    import voluptuous as vol
+
+    from custom_components.solaredge_modbus_multi import CONFIG_SCHEMA
+
+    with pytest.raises(vol.Invalid):
+        CONFIG_SCHEMA({DOMAIN: {section: {key: value}}})
+
+
+@pytest.mark.parametrize(
+    ("section", "config"),
+    [
+        ("retry", {"limit": 1, "time": 800, "ratio": 3}),
+        ("retry", {"limit": 100}),
+        ("modbus", {"timeout": 3, "retries": 0, "reconnect_delay": 0}),
+        ("modbus", {"reconnect_delay": 300.0, "reconnect_delay_max": 600.0}),
+    ],
+)
+def test_yaml_schema_accepts_defaults_and_bounds(section, config) -> None:
+    """Documented defaults and boundary values remain valid."""
+    from custom_components.solaredge_modbus_multi import CONFIG_SCHEMA
+
+    validated = CONFIG_SCHEMA({DOMAIN: {section: config}})
+    assert validated[DOMAIN][section] == config
 
 
 async def test_async_setup_entry_success(
@@ -249,6 +295,80 @@ async def test_async_setup_entry_data_update_failed(
                 hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS
             )
             await async_setup_entry(hass, mock_config_entry)
+
+
+async def test_setup_entry_failure_calls_shutdown(
+    hass: HomeAssistant,
+    mock_config_entry,
+) -> None:
+    """A failed first refresh must shut the hub down before the retry."""
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN]["yaml"] = {}
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient"
+    ) as mock_client:
+        mock_instance = mock_client.return_value
+        mock_instance.connect = AsyncMock(side_effect=HubInitFailed("Hub init error"))
+        mock_instance.connected = False
+
+        with patch(
+            "custom_components.solaredge_modbus_multi.hub."
+            "SolarEdgeModbusMultiHub.shutdown",
+            new_callable=AsyncMock,
+        ) as mock_shutdown:
+            with pytest.raises(ConfigEntryNotReady):
+                mock_config_entry.mock_state(
+                    hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS
+                )
+                await async_setup_entry(hass, mock_config_entry)
+
+            assert mock_shutdown.await_count >= 1
+
+
+async def test_unload_entry_platforms_before_shutdown(hass: HomeAssistant) -> None:
+    """Platforms unload first; the hub shuts down only on success."""
+    order: list[str] = []
+
+    hub = MagicMock()
+
+    async def record_shutdown():
+        order.append("shutdown")
+
+    hub.shutdown = record_shutdown
+    entry = MagicMock()
+    entry.runtime_data = SimpleNamespace(hub=hub)
+
+    async def record_unload(_entry, _platforms):
+        order.append("unload_platforms")
+        return True
+
+    with patch.object(
+        hass.config_entries, "async_unload_platforms", side_effect=record_unload
+    ):
+        assert await async_unload_entry(hass, entry) is True
+
+    assert order == ["unload_platforms", "shutdown"]
+
+
+async def test_unload_entry_keeps_hub_when_platform_unload_fails(
+    hass: HomeAssistant,
+) -> None:
+    """A failed platform unload must leave the hub running for its entities."""
+    hub = MagicMock()
+    hub.shutdown = AsyncMock()
+    entry = MagicMock()
+    entry.runtime_data = SimpleNamespace(hub=hub)
+
+    with patch.object(
+        hass.config_entries,
+        "async_unload_platforms",
+        new_callable=AsyncMock,
+        return_value=False,
+    ):
+        assert await async_unload_entry(hass, entry) is False
+
+    hub.shutdown.assert_not_awaited()
 
 
 async def test_async_migrate_entry_v1_to_v2(hass: HomeAssistant) -> None:

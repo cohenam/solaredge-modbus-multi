@@ -49,17 +49,35 @@ CONFIG_SCHEMA = vol.Schema(
             {
                 "retry": vol.Schema(
                     {
-                        vol.Optional("time"): vol.Coerce(int),
-                        vol.Optional("ratio"): vol.Coerce(int),
-                        vol.Optional("limit"): vol.Coerce(int),
+                        vol.Optional("time"): vol.All(
+                            vol.Coerce(int), vol.Range(min=10, max=60000)
+                        ),
+                        vol.Optional("ratio"): vol.All(
+                            vol.Coerce(int), vol.Range(min=1, max=10)
+                        ),
+                        # limit <= 0 would mean "retry forever" to the
+                        # coordinator but "fail instantly" to the hub's
+                        # timeout counter — forbidden rather than defined.
+                        vol.Optional("limit"): vol.All(
+                            vol.Coerce(int), vol.Range(min=1, max=100)
+                        ),
                     }
                 ),
                 "modbus": vol.Schema(
                     {
-                        vol.Optional("timeout"): vol.Coerce(int),
-                        vol.Optional("retries"): vol.Coerce(int),
-                        vol.Optional("reconnect_delay"): vol.Coerce(float),
-                        vol.Optional("reconnect_delay_max"): vol.Coerce(float),
+                        vol.Optional("timeout"): vol.All(
+                            vol.Coerce(int), vol.Range(min=1, max=60)
+                        ),
+                        vol.Optional("retries"): vol.All(
+                            vol.Coerce(int), vol.Range(min=0, max=10)
+                        ),
+                        # 0 keeps pymodbus auto-reconnect disabled (the default).
+                        vol.Optional("reconnect_delay"): vol.All(
+                            vol.Coerce(float), vol.Range(min=0, max=300)
+                        ),
+                        vol.Optional("reconnect_delay_max"): vol.All(
+                            vol.Coerce(float), vol.Range(min=0, max=600)
+                        ),
                     }
                 ),
             }
@@ -95,14 +113,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: SolarEdgeConfigEntry) ->
 
     try:
         await coordinator.async_config_entry_first_refresh()
+    except ConfigEntryNotReady:
+        # first_refresh wraps hub failures into ConfigEntryNotReady itself;
+        # close the half-open modbus client before HA schedules the retry.
+        await solaredge_hub.shutdown()
+        raise
     except HubInitFailed as err:
         _LOGGER.debug("Initial connection failed: %s", err)
+        await solaredge_hub.shutdown()
         raise ConfigEntryNotReady(
             f"Unable to connect to SolarEdge inverter at "
             f"{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}: {err}"
         ) from err
     except DataUpdateFailed as err:
         _LOGGER.debug("Initial data refresh failed: %s", err)
+        await solaredge_hub.shutdown()
         raise ConfigEntryNotReady(
             f"Unable to read data from SolarEdge inverter: {err}"
         ) from err
@@ -116,9 +141,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: SolarEdgeConfigEntry) ->
 
 async def async_unload_entry(hass: HomeAssistant, entry: SolarEdgeConfigEntry) -> bool:
     """Unload a config entry."""
-    await entry.runtime_data.hub.shutdown()
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        await entry.runtime_data.hub.shutdown()
 
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    return unload_ok
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
