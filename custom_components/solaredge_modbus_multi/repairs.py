@@ -84,6 +84,12 @@ class CheckConfigurationRepairFlow(RepairsFlow):
                             unique_id=this_unique_id,
                             data={**self._entry.data, **user_input},
                         )
+                        # No update listener anymore: trigger the retry with
+                        # the fixed config explicitly (safe for entries in
+                        # setup-retry, which is where this repair fires).
+                        self.hass.config_entries.async_schedule_reload(
+                            self._entry.entry_id
+                        )
 
                         return self.async_create_entry(title="", data={})
 

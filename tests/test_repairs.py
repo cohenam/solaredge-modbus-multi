@@ -795,3 +795,33 @@ class TestIssueScoping:
 
         for legacy_id in LEGACY_ISSUE_IDS:
             assert registry.async_get_issue(DOMAIN, legacy_id) is None
+
+
+class TestRepairReload:
+    """The repair fix must schedule exactly one reload of the fixed entry."""
+
+    async def test_repair_fix_schedules_reload_once(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        data = {"entry_id": mock_config_entry.entry_id}
+        flow = await async_create_fix_flow(hass, "check_configuration", data)
+        flow.hass = hass
+
+        with (
+            patch.object(hass.config_entries, "async_schedule_reload") as mock_schedule,
+            patch.object(
+                hass.config_entries, "async_reload", new_callable=AsyncMock
+            ) as mock_reload,
+        ):
+            result = await flow.async_step_confirm(
+                user_input={
+                    CONF_HOST: "192.168.1.150",
+                    CONF_PORT: 1502,
+                    ConfName.DEVICE_LIST: "1",
+                }
+            )
+            await hass.async_block_till_done()
+
+        assert result["type"] == "create_entry"
+        assert mock_schedule.call_count + mock_reload.call_count == 1
+        mock_schedule.assert_called_once_with(mock_config_entry.entry_id)

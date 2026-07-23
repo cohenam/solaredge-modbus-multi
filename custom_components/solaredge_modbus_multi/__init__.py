@@ -145,7 +145,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SolarEdgeConfigEntry) ->
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    # No update listener: the options flow reloads via OptionsFlowWithReload,
+    # reconfigure via async_update_reload_and_abort, repairs schedule their
+    # own reload. A listener alongside those double-reloads (error in 2026.12).
 
     return True
 
@@ -168,11 +170,6 @@ async def async_remove_entry(hass: HomeAssistant, entry: SolarEdgeConfigEntry) -
     deleted here or they orphan.
     """
     async_delete_entry_issues(hass, entry)
-
-
-async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle an options update."""
-    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_remove_config_entry_device(

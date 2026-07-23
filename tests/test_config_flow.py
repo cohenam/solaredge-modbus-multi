@@ -1087,3 +1087,108 @@ async def test_adv_pwr_ctl_direct_from_init(
     )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+# Reload architecture tests: every config path reloads EXACTLY once.
+# The update listener is gone; OptionsFlowWithReload owns the options
+# reload, async_update_reload_and_abort owns the reconfigure reload.
+
+
+def test_options_flow_uses_options_flow_with_reload() -> None:
+    """The options flow must be the auto-reloading variant."""
+    from homeassistant.config_entries import OptionsFlowWithReload
+
+    from custom_components.solaredge_modbus_multi.config_flow import (
+        SolaredgeModbusMultiOptionsFlowHandler,
+    )
+
+    assert issubclass(SolaredgeModbusMultiOptionsFlowHandler, OptionsFlowWithReload)
+
+
+async def test_options_flow_reloads_exactly_once(
+    hass: HomeAssistant, mock_config_entry_data, mock_config_entry_options
+) -> None:
+    """Changed options schedule one reload — not zero, not two."""
+    entry = MockConfigEntry(
+        version=2,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Test SolarEdge",
+        data=mock_config_entry_data,
+        options=mock_config_entry_options,
+        source=config_entries.SOURCE_USER,
+        unique_id="192.168.1.100:1502",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    with (
+        patch.object(hass.config_entries, "async_schedule_reload") as mock_schedule,
+        patch.object(
+            hass.config_entries, "async_reload", new_callable=AsyncMock
+        ) as mock_reload,
+    ):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                CONF_SCAN_INTERVAL: 600,
+                ConfName.KEEP_MODBUS_OPEN: True,
+                ConfName.DETECT_METERS: True,
+                ConfName.DETECT_BATTERIES: False,
+                ConfName.DETECT_EXTRAS: False,
+                ConfName.ADV_PWR_CONTROL: False,
+                ConfName.SLEEP_AFTER_WRITE: 5,
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert mock_schedule.call_count + mock_reload.call_count == 1
+    mock_schedule.assert_called_once_with(entry.entry_id)
+
+
+@pytest.mark.skipif(not HAS_RECONFIGURE, reason="SOURCE_RECONFIGURE not available")
+async def test_reconfigure_reloads_exactly_once(
+    hass: HomeAssistant, mock_config_entry_data
+) -> None:
+    """Reconfigure reloads once (it double-reloaded with the old listener)."""
+    existing_entry = MockConfigEntry(
+        version=2,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Existing SolarEdge",
+        data=mock_config_entry_data,
+        source=config_entries.SOURCE_USER,
+        unique_id="192.168.1.100:1502",
+    )
+    existing_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": existing_entry.entry_id,
+        },
+    )
+
+    with (
+        patch.object(hass.config_entries, "async_schedule_reload") as mock_schedule,
+        patch.object(
+            hass.config_entries, "async_reload", new_callable=AsyncMock
+        ) as mock_reload,
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_HOST: "192.168.1.101",
+                CONF_PORT: 1502,
+                ConfName.DEVICE_LIST: "1,2",
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert mock_schedule.call_count + mock_reload.call_count == 1
+    mock_schedule.assert_called_once_with(existing_entry.entry_id)

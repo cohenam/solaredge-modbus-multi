@@ -486,20 +486,47 @@ async def test_async_migrate_entry_unsupported_version(hass: HomeAssistant) -> N
     assert result is False
 
 
-async def test_async_reload_entry(
+async def test_setup_entry_registers_no_update_listener(
     hass: HomeAssistant,
     mock_config_entry,
+    mock_modbus_client,
+    mock_inverter_registers,
+    mock_inverter_model_registers,
 ) -> None:
-    """Test async_reload_entry calls reload on the entry."""
-    from custom_components.solaredge_modbus_multi import async_reload_entry
+    """No config-entry update listener: reloads belong to the flows.
 
-    # Initialize domain data
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["yaml"] = {}
+    A listener combined with OptionsFlowWithReload raises ValueError in
+    the options-flow manager, and combined with flow reload helpers it
+    double-reloads (an error from HA 2026.12).
+    """
+    from tests.conftest import create_modbus_response
 
-    with patch.object(hass.config_entries, "async_reload") as mock_reload:
-        await async_reload_entry(hass, mock_config_entry)
-        mock_reload.assert_called_once_with(mock_config_entry.entry_id)
+    await async_setup(hass, {})
+
+    mock_client = mock_modbus_client.return_value
+
+    def mock_read(address, count, **kwargs):
+        if address == 40000:
+            return create_modbus_response(mock_inverter_registers)
+        elif address == 40044:
+            return create_modbus_response(
+                [0] * 8 + [0] * 17 + mock_inverter_model_registers
+            )
+        else:
+            return create_modbus_response([0] * count)
+
+    mock_client.read_holding_registers = AsyncMock(side_effect=mock_read)
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert mock_config_entry.update_listeners == []
+
+    await mock_config_entry.runtime_data.coordinator.async_shutdown()
 
 
 async def test_async_remove_config_entry_device_in_use(

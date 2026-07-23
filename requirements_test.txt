@@ -2,4 +2,5 @@
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
 pytest-cov>=4.1.0
-pytest-homeassistant-custom-component>=0.13.190
+# 0.13.269 = first release bundling HA 2025.8.0 (OptionsFlowWithReload)
+pytest-homeassistant-custom-component>=0.13.269

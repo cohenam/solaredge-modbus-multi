@@ -9,7 +9,12 @@ from typing import Any
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.config_entries import ConfigEntry, ConfigFlowResult, OptionsFlow
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlowResult,
+    OptionsFlow,
+    OptionsFlowWithReload,
+)
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import AbortFlow
@@ -355,9 +360,7 @@ class SolaredgeModbusMultiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Handle the reconfigure flow step."""
         errors = {}
-        config_entry = self.hass.config_entries.async_get_entry(
-            self.context["entry_id"]
-        )
+        config_entry = self._get_reconfigure_entry()
 
         if user_input is not None:
             user_input[CONF_HOST] = user_input[CONF_HOST].lower()
@@ -420,8 +423,13 @@ class SolaredgeModbusMultiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
 
-class SolaredgeModbusMultiOptionsFlowHandler(OptionsFlow):
-    """Handle an options flow for SolarEdge Modbus Multi."""
+class SolaredgeModbusMultiOptionsFlowHandler(OptionsFlowWithReload):
+    """Handle an options flow for SolarEdge Modbus Multi.
+
+    OptionsFlowWithReload reloads the entry when options change; the old
+    config-entry update listener is gone (deprecated combination, an error
+    from HA 2026.12).
+    """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
