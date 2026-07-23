@@ -45,20 +45,21 @@ async def async_setup_entry(
 class SolarEdgeButtonBase(SolarEdgeEntityBase, ButtonEntity):
     """Base class for SolarEdge button entities."""
 
+    uid_suffix: str | None = None
+
+    def __init__(self, platform, config_entry, coordinator) -> None:
+        super().__init__(platform, config_entry, coordinator)
+        if self.uid_suffix is not None:
+            self._attr_unique_id = f"{platform.uid_base}_{self.uid_suffix}"
+
 
 class SolarEdgeRefreshButton(SolarEdgeButtonBase):
     """Button to request an immediate device data update."""
 
-    entity_category = EntityCategory.CONFIG
-    icon = "mdi:refresh"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_refresh"
-
-    @property
-    def name(self) -> str:
-        return "Refresh"
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:refresh"
+    _attr_name = "Refresh"
+    uid_suffix = "refresh"
 
     @property
     def available(self) -> bool:
@@ -71,16 +72,13 @@ class SolarEdgeRefreshButton(SolarEdgeButtonBase):
 class SolarEdgeCommitControlSettings(SolarEdgeButtonBase):
     """Button to Commit Power Control Settings."""
 
-    entity_category = EntityCategory.CONFIG
-    icon = "mdi:content-save-cog-outline"
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:content-save-cog-outline"
+    _attr_name = "Commit Power Settings"
 
     @property
     def unique_id(self) -> str:
         return f"{self._platform.uid_base}bt_commit_pwr_settings"
-
-    @property
-    def name(self) -> str:
-        return "Commit Power Settings"
 
     async def async_press(self) -> None:
         _LOGGER.debug(f"set {self.unique_id} to 1")
@@ -97,16 +95,13 @@ class SolarEdgeCommitControlSettings(SolarEdgeButtonBase):
 class SolarEdgeDefaultControlSettings(SolarEdgeButtonBase):
     """Button to Restore Power Control Default Settings."""
 
-    entity_category = EntityCategory.CONFIG
-    icon = "mdi:restore-alert"
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:restore-alert"
+    _attr_name = "Default Power Settings"
 
     @property
     def unique_id(self) -> str:
         return f"{self._platform.uid_base}bt_default_pwr_settings"
-
-    @property
-    def name(self) -> str:
-        return "Default Power Settings"
 
     @property
     def entity_registry_enabled_default(self) -> bool:

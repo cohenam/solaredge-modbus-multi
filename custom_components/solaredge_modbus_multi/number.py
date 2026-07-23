@@ -73,19 +73,19 @@ async def async_setup_entry(
 
 
 class SolarEdgeNumberBase(SolarEdgeEntityBase, NumberEntity):
-    entity_category = EntityCategory.CONFIG
+    _attr_entity_category = EntityCategory.CONFIG
+    uid_suffix: str | None = None
+
+    def __init__(self, platform, config_entry, coordinator) -> None:
+        super().__init__(platform, config_entry, coordinator)
+        if self.uid_suffix is not None:
+            self._attr_unique_id = f"{platform.uid_base}_{self.uid_suffix}"
 
 
 class StorageACChargeLimit(SolarEdgeNumberBase):
-    icon = "mdi:lightning-bolt"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_storage_ac_charge_limit"
-
-    @property
-    def name(self) -> str:
-        return "AC Charge Limit"
+    _attr_icon = "mdi:lightning-bolt"
+    _attr_name = "AC Charge Limit"
+    uid_suffix = "storage_ac_charge_limit"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -153,18 +153,12 @@ class StorageACChargeLimit(SolarEdgeNumberBase):
 
 
 class StorageBackupReserve(SolarEdgeNumberBase):
-    native_unit_of_measurement = PERCENTAGE
-    native_min_value = 0
-    native_max_value = 100
-    icon = "mdi:battery-positive"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_storage_backup_reserve"
-
-    @property
-    def name(self) -> str:
-        return "Backup Reserve"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_native_min_value = 0
+    _attr_native_max_value = 100
+    _attr_icon = "mdi:battery-positive"
+    _attr_name = "Backup Reserve"
+    uid_suffix = "storage_backup_reserve"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -206,18 +200,12 @@ class StorageBackupReserve(SolarEdgeNumberBase):
 
 
 class StorageCommandTimeout(SolarEdgeNumberBase):
-    native_min_value = 0
-    native_max_value = 86400  # 24h
-    native_unit_of_measurement = UnitOfTime.SECONDS
-    icon = "mdi:clock-end"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_storage_command_timeout"
-
-    @property
-    def name(self) -> str:
-        return "Storage Command Timeout"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 86400  # 24h
+    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+    _attr_icon = "mdi:clock-end"
+    _attr_name = "Storage Command Timeout"
+    uid_suffix = "storage_command_timeout"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -261,18 +249,12 @@ class StorageCommandTimeout(SolarEdgeNumberBase):
 
 
 class StorageChargeLimit(SolarEdgeNumberBase):
-    native_min_value = 0
-    native_step = 1.0
-    native_unit_of_measurement = UnitOfPower.WATT
-    icon = "mdi:lightning-bolt"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_storage_charge_limit"
-
-    @property
-    def name(self) -> str:
-        return "Storage Charge Limit"
+    _attr_native_min_value = 0
+    _attr_native_step = 1.0
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_icon = "mdi:lightning-bolt"
+    _attr_name = "Storage Charge Limit"
+    uid_suffix = "storage_charge_limit"
 
     @property
     def available(self) -> bool:
@@ -317,18 +299,12 @@ class StorageChargeLimit(SolarEdgeNumberBase):
 
 
 class StorageDischargeLimit(SolarEdgeNumberBase):
-    native_min_value = 0
-    native_step = 1.0
-    native_unit_of_measurement = UnitOfPower.WATT
-    icon = "mdi:lightning-bolt"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_storage_discharge_limit"
-
-    @property
-    def name(self) -> str:
-        return "Storage Discharge Limit"
+    _attr_native_min_value = 0
+    _attr_native_step = 1.0
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_icon = "mdi:lightning-bolt"
+    _attr_name = "Storage Discharge Limit"
+    uid_suffix = "storage_discharge_limit"
 
     @property
     def available(self) -> bool:
@@ -373,18 +349,12 @@ class StorageDischargeLimit(SolarEdgeNumberBase):
 
 
 class SolarEdgeSiteLimit(SolarEdgeNumberBase):
-    native_min_value = 0
-    native_max_value = 1000000
-    native_unit_of_measurement = UnitOfPower.WATT
-    icon = "mdi:lightning-bolt"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_site_limit"
-
-    @property
-    def name(self) -> str:
-        return "Site Limit"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 1000000
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_icon = "mdi:lightning-bolt"
+    _attr_name = "Site Limit"
+    uid_suffix = "site_limit"
 
     @property
     def available(self) -> bool:
@@ -422,18 +392,12 @@ class SolarEdgeSiteLimit(SolarEdgeNumberBase):
 
 
 class SolarEdgeExternalProductionMax(SolarEdgeNumberBase):
-    native_min_value = 0
-    native_max_value = 1000000
-    native_unit_of_measurement = UnitOfPower.WATT
-    icon = "mdi:lightning-bolt"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_external_production_max"
-
-    @property
-    def name(self) -> str:
-        return "External Production Max"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 1000000
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_icon = "mdi:lightning-bolt"
+    _attr_name = "External Production Max"
+    uid_suffix = "external_production_max"
 
     @property
     def available(self) -> bool:
@@ -476,19 +440,13 @@ class SolarEdgeExternalProductionMax(SolarEdgeNumberBase):
 class SolarEdgeActivePowerLimitSet(SolarEdgeNumberBase):
     """Global Dynamic Power Control: Set Inverter Active Power Limit"""
 
-    native_unit_of_measurement = PERCENTAGE
-    native_min_value = 0
-    native_max_value = 100
-    mode = "slider"
-    icon = "mdi:percent"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_active_power_limit_set"
-
-    @property
-    def name(self) -> str:
-        return "Active Power Limit"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_native_min_value = 0
+    _attr_native_max_value = 100
+    _attr_mode = "slider"
+    _attr_icon = "mdi:percent"
+    _attr_name = "Active Power Limit"
+    uid_suffix = "active_power_limit_set"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -529,19 +487,13 @@ class SolarEdgeActivePowerLimitSet(SolarEdgeNumberBase):
 class SolarEdgeCosPhiSet(SolarEdgeNumberBase):
     """Global Dynamic Power Control: Set Inverter CosPhi"""
 
-    native_min_value = -1.0
-    native_max_value = 1.0
-    native_step = 0.1
-    mode = "slider"
-    icon = "mdi:angle-acute"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_cosphi_set"
-
-    @property
-    def name(self) -> str:
-        return "CosPhi"
+    _attr_native_min_value = -1.0
+    _attr_native_max_value = 1.0
+    _attr_native_step = 0.1
+    _attr_mode = "slider"
+    _attr_icon = "mdi:angle-acute"
+    _attr_name = "CosPhi"
+    uid_suffix = "cosphi_set"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -582,19 +534,13 @@ class SolarEdgeCosPhiSet(SolarEdgeNumberBase):
 class SolarEdgePowerReduce(SolarEdgeNumberBase):
     """Limits the inverter's maximum output power from 0-100%"""
 
-    native_unit_of_measurement = PERCENTAGE
-    native_min_value = 0
-    native_max_value = 100
-    mode = "slider"
-    icon = "mdi:percent"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_power_reduce"
-
-    @property
-    def name(self) -> str:
-        return "Power Reduce"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_native_min_value = 0
+    _attr_native_max_value = 100
+    _attr_mode = "slider"
+    _attr_icon = "mdi:percent"
+    _attr_name = "Power Reduce"
+    uid_suffix = "power_reduce"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -635,18 +581,12 @@ class SolarEdgePowerReduce(SolarEdgeNumberBase):
 class SolarEdgeCurrentLimit(SolarEdgeNumberBase):
     """Limits the inverter's maximum output current."""
 
-    native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
-    native_min_value = 0
-    native_max_value = 256
-    icon = "mdi:current-ac"
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_max_current"
-
-    @property
-    def name(self) -> str:
-        return "Current Limit"
+    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
+    _attr_native_min_value = 0
+    _attr_native_max_value = 256
+    _attr_icon = "mdi:current-ac"
+    _attr_name = "Current Limit"
+    uid_suffix = "max_current"
 
     @property
     def entity_registry_enabled_default(self) -> bool:

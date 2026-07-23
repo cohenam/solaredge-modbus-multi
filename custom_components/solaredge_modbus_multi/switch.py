@@ -48,11 +48,20 @@ async def async_setup_entry(
 class SolarEdgeSwitchBase(SolarEdgeEntityBase, SwitchEntity):
     """Base class for SolarEdge switch entities."""
 
+    uid_suffix: str | None = None
+
+    def __init__(self, platform, config_entry, coordinator) -> None:
+        super().__init__(platform, config_entry, coordinator)
+        if self.uid_suffix is not None:
+            self._attr_unique_id = f"{platform.uid_base}_{self.uid_suffix}"
+
 
 class SolarEdgeExternalProduction(SolarEdgeSwitchBase):
     """External Production switch. Indicates a non-SolarEdge power sorce in system."""
 
-    entity_category = EntityCategory.CONFIG
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_name = "External Production"
+    uid_suffix = "external_production"
 
     @property
     def available(self) -> bool:
@@ -64,14 +73,6 @@ class SolarEdgeExternalProduction(SolarEdgeSwitchBase):
 
         except KeyError:
             return False
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_external_production"
-
-    @property
-    def name(self) -> str:
-        return "External Production"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -119,7 +120,9 @@ class SolarEdgeExternalProduction(SolarEdgeSwitchBase):
 class SolarEdgeNegativeSiteLimit(SolarEdgeSwitchBase):
     """Negative Site Limit switch. Sets minimum import power when enabled."""
 
-    entity_category = EntityCategory.CONFIG
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_name = "Negative Site Limit"
+    uid_suffix = "negative_site_limit"
 
     @property
     def available(self) -> bool:
@@ -131,14 +134,6 @@ class SolarEdgeNegativeSiteLimit(SolarEdgeSwitchBase):
 
         except KeyError:
             return False
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_negative_site_limit"
-
-    @property
-    def name(self) -> str:
-        return "Negative Site Limit"
 
     @property
     def is_on(self) -> bool:
@@ -182,7 +177,9 @@ class SolarEdgeNegativeSiteLimit(SolarEdgeSwitchBase):
 class SolarEdgeGridControl(SolarEdgeSwitchBase):
     """Grid Control boolean switch. This is "AdvancedPwrControlEn" in specs."""
 
-    entity_category = EntityCategory.CONFIG
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_name = "Advanced Power Control"
+    uid_suffix = "adv_pwr_ctrl"
 
     @property
     def available(self) -> bool:
@@ -191,14 +188,6 @@ class SolarEdgeGridControl(SolarEdgeSwitchBase):
             and self._platform.advanced_power_control
             and "AdvPwrCtrlEn" in self._platform.decoded_model.keys()
         )
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_adv_pwr_ctrl"
-
-    @property
-    def name(self) -> str:
-        return "Advanced Power Control"
 
     @property
     def is_on(self) -> bool:

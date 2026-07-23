@@ -66,22 +66,23 @@ def get_key(d, search):
 
 
 class SolarEdgeSelectBase(SolarEdgeEntityBase, SelectEntity):
-    entity_category = EntityCategory.CONFIG
+    _attr_entity_category = EntityCategory.CONFIG
+    uid_suffix: str | None = None
+
+    def __init__(self, platform, config_entry, coordinator) -> None:
+        super().__init__(platform, config_entry, coordinator)
+        if self.uid_suffix is not None:
+            self._attr_unique_id = f"{platform.uid_base}_{self.uid_suffix}"
 
 
 class StorageControlMode(SolarEdgeSelectBase):
+    _attr_name = "Storage Control Mode"
+    uid_suffix = "storage_control_mode"
+
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
         self._options = STORAGE_CONTROL_MODE
         self._attr_options = list(self._options.values())
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_storage_control_mode"
-
-    @property
-    def name(self) -> str:
-        return "Storage Control Mode"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -123,18 +124,13 @@ class StorageControlMode(SolarEdgeSelectBase):
 
 
 class StorageACChargePolicy(SolarEdgeSelectBase):
+    _attr_name = "AC Charge Policy"
+    uid_suffix = "ac_charge_policy"
+
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
         self._options = STORAGE_AC_CHARGE_POLICY
         self._attr_options = list(self._options.values())
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_ac_charge_policy"
-
-    @property
-    def name(self) -> str:
-        return "AC Charge Policy"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -176,18 +172,13 @@ class StorageACChargePolicy(SolarEdgeSelectBase):
 
 
 class StorageDefaultMode(SolarEdgeSelectBase):
+    _attr_name = "Storage Default Mode"
+    uid_suffix = "storage_default_mode"
+
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
         self._options = STORAGE_MODE
         self._attr_options = list(self._options.values())
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_storage_default_mode"
-
-    @property
-    def name(self) -> str:
-        return "Storage Default Mode"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -233,18 +224,13 @@ class StorageDefaultMode(SolarEdgeSelectBase):
 
 
 class StorageCommandMode(SolarEdgeSelectBase):
+    _attr_name = "Storage Command Mode"
+    uid_suffix = "storage_command_mode"
+
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
         self._options = STORAGE_MODE
         self._attr_options = list(self._options.values())
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_storage_command_mode"
-
-    @property
-    def name(self) -> str:
-        return "Storage Command Mode"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
@@ -290,6 +276,9 @@ class StorageCommandMode(SolarEdgeSelectBase):
 
 
 class SolaredgeLimitControlMode(SolarEdgeSelectBase):
+    _attr_name = "Limit Control Mode"
+    uid_suffix = "limit_control_mode"
+
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
         self._options = LIMIT_CONTROL_MODE
@@ -305,14 +294,6 @@ class SolaredgeLimitControlMode(SolarEdgeSelectBase):
 
         except KeyError:
             return False
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_limit_control_mode"
-
-    @property
-    def name(self) -> str:
-        return "Limit Control Mode"
 
     @property
     def current_option(self) -> str:
@@ -352,6 +333,9 @@ class SolaredgeLimitControlMode(SolarEdgeSelectBase):
 
 
 class SolaredgeLimitControl(SolarEdgeSelectBase):
+    _attr_name = "Limit Control"
+    uid_suffix = "limit_control"
+
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
         self._options = LIMIT_CONTROL
@@ -367,14 +351,6 @@ class SolaredgeLimitControl(SolarEdgeSelectBase):
 
         except KeyError:
             return False
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_limit_control"
-
-    @property
-    def name(self) -> str:
-        return "Limit Control"
 
     @property
     def current_option(self) -> str:
@@ -395,6 +371,9 @@ class SolaredgeLimitControl(SolarEdgeSelectBase):
 
 
 class SolarEdgeReactivePowerMode(SolarEdgeSelectBase):
+    _attr_name = "Reactive Power Mode"
+    uid_suffix = "reactive_power_mode"
+
     def __init__(self, platform, config_entry, coordinator):
         super().__init__(platform, config_entry, coordinator)
         self._options = REACTIVE_POWER_CONFIG
@@ -415,14 +394,6 @@ class SolarEdgeReactivePowerMode(SolarEdgeSelectBase):
 
         except KeyError:
             return False
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_reactive_power_mode"
-
-    @property
-    def name(self) -> str:
-        return "Reactive Power Mode"
 
     @property
     def current_option(self) -> str:

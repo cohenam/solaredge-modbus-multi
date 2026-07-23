@@ -41,11 +41,20 @@ async def async_setup_entry(
 class SolarEdgeBinarySensorBase(SolarEdgeEntityBase, BinarySensorEntity):
     """Base class for SolarEdge binary sensor entities."""
 
+    uid_suffix: str | None = None
+
+    def __init__(self, platform, config_entry, coordinator) -> None:
+        super().__init__(platform, config_entry, coordinator)
+        if self.uid_suffix is not None:
+            self._attr_unique_id = f"{platform.uid_base}_{self.uid_suffix}"
+
 
 class AdvPowerControlEnabled(SolarEdgeBinarySensorBase):
     """Grid Control boolean status. This is "AdvancedPwrControlEn" in specs."""
 
-    entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_name = "Advanced Power Control"
+    uid_suffix = "adv_pwr_ctrl_en"
 
     @property
     def available(self) -> bool:
@@ -56,14 +65,6 @@ class AdvPowerControlEnabled(SolarEdgeBinarySensorBase):
         )
 
     @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_adv_pwr_ctrl_en"
-
-    @property
-    def name(self) -> str:
-        return "Advanced Power Control"
-
-    @property
     def is_on(self) -> bool:
         return self._platform.decoded_model["AdvPwrCtrlEn"] == 0x1
 
@@ -71,22 +72,16 @@ class AdvPowerControlEnabled(SolarEdgeBinarySensorBase):
 class GridStatusOnOff(SolarEdgeBinarySensorBase):
     """Grid Status On Off. This is undocumented from discussions."""
 
-    device_class = BinarySensorDeviceClass.POWER
-    icon = "mdi:transmission-tower"
+    _attr_device_class = BinarySensorDeviceClass.POWER
+    _attr_icon = "mdi:transmission-tower"
+    _attr_name = "Grid Status"
+    uid_suffix = "grid_status_on_off"
 
     @property
     def available(self) -> bool:
         return (
             super().available and "I_Grid_Status" in self._platform.decoded_model.keys()
         )
-
-    @property
-    def unique_id(self) -> str:
-        return f"{self._platform.uid_base}_grid_status_on_off"
-
-    @property
-    def name(self) -> str:
-        return "Grid Status"
 
     @property
     def entity_registry_enabled_default(self) -> bool:
