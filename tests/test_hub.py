@@ -539,6 +539,49 @@ async def test_write_registers_sleep_after_write(mock_hub, mock_modbus_client) -
             mock_sleep.assert_called_once_with(1)
 
 
+async def test_write_registers_cancelled_during_sleep(
+    mock_hub, mock_modbus_client
+) -> None:
+    """A write cancelled mid-sleep must clear has_write, not leave it stuck."""
+    import asyncio as aio
+
+    mock_hub._sleep_after_write = 1
+    mock_client = mock_modbus_client.return_value
+
+    success_response = MagicMock()
+    success_response.isError.return_value = False
+    mock_client.write_registers.return_value = success_response
+
+    sleeping = aio.Event()
+
+    async def hanging_sleep(_delay):
+        sleeping.set()
+        await aio.Future()  # sleeps until cancelled
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await mock_hub.connect()
+
+        with patch(
+            "custom_components.solaredge_modbus_multi.hub.asyncio.sleep",
+            side_effect=hanging_sleep,
+        ):
+            write_task = aio.create_task(
+                mock_hub.write_registers(unit=1, address=57348, payload=[1])
+            )
+            await sleeping.wait()
+            assert mock_hub.has_write == 57348
+
+            write_task.cancel()
+            with pytest.raises(aio.CancelledError):
+                await write_task
+
+    assert mock_hub.has_write is None
+    assert mock_hub._slow_poll_requests == 1
+
+
 # Modbus Read Holding Registers Error Tests
 
 

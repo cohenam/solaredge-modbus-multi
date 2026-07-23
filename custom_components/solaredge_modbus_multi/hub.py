@@ -903,15 +903,20 @@ class SolarEdgeModbusMultiHub:
         self.has_write = address
         # Control registers changed: request a slow-block re-read. A counter
         # (not a flag) so an in-flight refresh can't consume this request.
+        # Kept outside the try: it must run exactly once per write.
         self._slow_poll_requests += 1
 
-        if self.sleep_after_write > 0:
-            _LOGGER.debug(
-                f"Sleep {self.sleep_after_write} seconds after write {address}."
-            )
-            await asyncio.sleep(self.sleep_after_write)
+        try:
+            if self.sleep_after_write > 0:
+                _LOGGER.debug(
+                    f"Sleep {self.sleep_after_write} seconds after write {address}."
+                )
+                await asyncio.sleep(self.sleep_after_write)
+        finally:
+            # Cancellation during the sleep must not leave has_write stuck,
+            # or every poll would wait out the coordinator's bounded clear.
+            self.has_write = None
 
-        self.has_write = None
         _LOGGER.debug(f"Finished with write {address}.")
 
     @staticmethod

@@ -1925,7 +1925,7 @@ class SolarEdgeBatteryEnergyExport(SolarEdgeSensorBase):
         try:
             if self._platform.decoded_model[
                 "B_Export_Energy_WH"
-            ] == 0xFFFFFFFFFFFFFFFF or (
+            ] == SunSpecNotImpl.UINT64 or (
                 self._platform.decoded_model["B_Export_Energy_WH"] == 0x0
                 and not self._platform.allow_battery_energy_reset
             ):
@@ -2014,7 +2014,7 @@ class SolarEdgeBatteryEnergyImport(SolarEdgeSensorBase):
         try:
             if self._platform.decoded_model[
                 "B_Import_Energy_WH"
-            ] == 0xFFFFFFFFFFFFFFFF or (
+            ] == SunSpecNotImpl.UINT64 or (
                 self._platform.decoded_model["B_Import_Energy_WH"] == 0x0
                 and not self._platform.allow_battery_energy_reset
             ):
