@@ -1422,3 +1422,18 @@ VENDOR4_STATUS: dict[int, dict[int, str]] = {
         0x34: "Reverse polarity battery try to precharge",
     },
 }
+
+
+def check_config_issue_id(entry_id: str) -> str:
+    """Repair issue id for connect/configuration failures, scoped per entry."""
+    return f"check_configuration_{entry_id}"
+
+
+def detect_timeout_issue_id(kind: str, entry_id: str, inverter_unit_id: int) -> str:
+    """Repair issue id for a control-block detection timeout, per inverter."""
+    return f"detect_timeout_{kind}_{entry_id}_{inverter_unit_id}"
+
+
+# Pre-scoping ids: one shared issue per kind for ALL entries and inverters,
+# so two hubs (or two inverters) collided on create/delete. Swept on setup.
+LEGACY_ISSUE_IDS = ("check_configuration", "detect_timeout_gpc", "detect_timeout_apc")
