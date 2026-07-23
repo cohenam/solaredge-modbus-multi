@@ -198,15 +198,24 @@ LEGACY_ISSUE_IDS = ("check_configuration", "detect_timeout_gpc", "detect_timeout
 
 
 def async_delete_entry_issues(hass, entry) -> None:
-    """Remove every repair issue belonging to a config entry."""
-    ir.async_delete_issue(hass, DOMAIN, check_config_issue_id(entry.entry_id))
-    for inverter_unit_id in entry.data.get(ConfName.DEVICE_LIST, []):
-        for kind in ("gpc", "apc"):
-            ir.async_delete_issue(
-                hass,
-                DOMAIN,
-                detect_timeout_issue_id(kind, entry.entry_id, inverter_unit_id),
-            )
+    """Remove every repair issue belonging to a config entry.
+
+    Scans the issue registry by the entry-scoped id prefixes instead of
+    deriving ids from the entry's device list: a reconfigure rewrites
+    entry.data before the reload, so a removed inverter's issues would
+    otherwise be undiscoverable and orphan until the next restart.
+    """
+    per_unit_prefixes = tuple(
+        f"detect_timeout_{kind}_{entry.entry_id}_" for kind in ("gpc", "apc")
+    )
+    check_config_id = check_config_issue_id(entry.entry_id)
+
+    registry = ir.async_get(hass)
+    for domain, issue_id in list(registry.issues):
+        if domain != DOMAIN:
+            continue
+        if issue_id == check_config_id or issue_id.startswith(per_unit_prefixes):
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
 def decode_sunspec_string(registers: list[int], word_order: str = "big") -> str:

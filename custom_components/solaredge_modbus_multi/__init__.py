@@ -143,7 +143,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SolarEdgeConfigEntry) ->
             f"Unable to read data from SolarEdge inverter: {err}"
         ) from err
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except BaseException:
+        # A failed (or cancelled) platform setup must not leak the connected
+        # modbus client — the inverter has a single TCP session slot.
+        await solaredge_hub.shutdown()
+        raise
 
     # No update listener: the options flow reloads via OptionsFlowWithReload,
     # reconfigure via async_update_reload_and_abort, repairs schedule their

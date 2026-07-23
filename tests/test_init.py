@@ -911,3 +911,56 @@ async def test_coordinator_update_raises_update_failed_on_data_update_failed(
             # Call _async_update_data directly to test exception conversion
             with pytest.raises(UpdateFailed):
                 await coordinator._async_update_data()
+
+
+async def test_setup_entry_platform_failure_shuts_hub_down(
+    hass: HomeAssistant,
+    mock_config_entry,
+    mock_modbus_client,
+    mock_inverter_registers,
+    mock_inverter_model_registers,
+) -> None:
+    """A failed platform forward must not leak the connected modbus session."""
+    from tests.conftest import create_modbus_response
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN]["yaml"] = {}
+
+    mock_client = mock_modbus_client.return_value
+
+    def mock_read(address, count, **kwargs):
+        if address == 40000:
+            return create_modbus_response(mock_inverter_registers)
+        elif address == 40044:
+            return create_modbus_response(
+                [0] * 8 + [0] * 17 + mock_inverter_model_registers
+            )
+        else:
+            return create_modbus_response([0] * count)
+
+    mock_client.read_holding_registers = AsyncMock(side_effect=mock_read)
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        with (
+            patch.object(
+                hass.config_entries,
+                "async_forward_entry_setups",
+                new_callable=AsyncMock,
+                side_effect=ImportError("broken platform"),
+            ),
+            patch(
+                "custom_components.solaredge_modbus_multi.hub."
+                "SolarEdgeModbusMultiHub.shutdown",
+                new_callable=AsyncMock,
+            ) as mock_shutdown,
+        ):
+            mock_config_entry.mock_state(
+                hass, config_entries.ConfigEntryState.SETUP_IN_PROGRESS
+            )
+            with pytest.raises(ImportError):
+                await async_setup_entry(hass, mock_config_entry)
+
+            assert mock_shutdown.await_count >= 1

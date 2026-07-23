@@ -105,7 +105,7 @@ class SolarEdgeDeviceScanner:
 
         for device_id in device_list:
             _LOGGER.debug(f"Calling scan_device_id on device_id={device_id}")
-            result = await self.scan_device_id(device_id, self._scan_timeout)
+            result = await self.scan_device_id(device_id)
             if result == self.FOUND_INV:
                 self.inverters.append(device_id)
 
@@ -133,7 +133,7 @@ class SolarEdgeDeviceScanner:
         no_response = []
 
         for device_id in device_list:
-            result = await self.scan_device_id(device_id, self._scan_timeout)
+            result = await self.scan_device_id(device_id)
             if result == self.FOUND_INV:
                 inverters.append(device_id)
             elif result == self.FOUND:
@@ -193,12 +193,14 @@ class SolarEdgeDeviceScanner:
             and manufacturer.startswith(SOLAREDGE_MANUFACTURER)
         )
 
-    async def scan_device_id(self, device_id: int, timeout: float = 5.0) -> int:
+    async def scan_device_id(self, device_id: int) -> int:
         """Scan a specific Modbus device ID for a SolarEdge inverter.
+
+        Response waiting is governed by the scan_timeout the scanner was
+        constructed with (the transport's per-request timeout).
 
         Args:
             device_id: The Modbus device ID to scan (1-247).
-            timeout: Maximum time in seconds to wait for a response.
 
         Returns:
             FOUND_INV (2) if a SolarEdge inverter was detected.

@@ -825,3 +825,52 @@ class TestRepairReload:
         assert result["type"] == "create_entry"
         assert mock_schedule.call_count + mock_reload.call_count == 1
         mock_schedule.assert_called_once_with(mock_config_entry.entry_id)
+
+
+class TestIssueCleanupByPrefix:
+    """Cleanup must not depend on the entry's CURRENT device list."""
+
+    async def test_delete_entry_issues_covers_removed_inverters(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Issues for a unit no longer in device_list are still deleted.
+
+        A reconfigure rewrites entry.data before the reload, so cleanup
+        can never learn the removed unit's id from the entry — it must
+        scan the registry by the entry-scoped prefix instead.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from homeassistant.helpers import issue_registry as ir
+
+        from custom_components.solaredge_modbus_multi.hub import (
+            async_delete_entry_issues,
+            detect_timeout_issue_id,
+        )
+
+        registry = ir.async_get(hass)
+
+        # Unit 7 was reconfigured away; entry.data now lists only [1].
+        orphan_id = detect_timeout_issue_id("gpc", "shrunk_entry", 7)
+        other_entry_id = detect_timeout_issue_id("gpc", "other_entry", 7)
+        for issue_id in (orphan_id, other_entry_id):
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="detect_timeout_gpc",
+                data={"entry_id": "x"},
+            )
+
+        entry = MagicMock()
+        entry.entry_id = "shrunk_entry"
+        entry.data = {ConfName.DEVICE_LIST: [1]}
+        entry.runtime_data = SimpleNamespace(hub=MagicMock())
+
+        async_delete_entry_issues(hass, entry)
+
+        assert registry.async_get_issue(DOMAIN, orphan_id) is None
+        assert registry.async_get_issue(DOMAIN, other_entry_id) is not None
