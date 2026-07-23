@@ -308,3 +308,37 @@ async def test_write_during_refresh_keeps_slow_poll_request(mock_hub) -> None:
     await mock_hub.async_refresh_modbus_data()
     assert mock_hub.slow_poll_due is True
     assert mock_hub._slow_poll_requests == 0
+
+
+async def test_uncommitted_power_settings_tracking_and_warning(
+    mock_hub, mock_modbus_client, caplog
+) -> None:
+    """Static APC writes are tracked and warned once until committed."""
+    import logging
+
+    mock_hub._sleep_after_write = 0
+    mock_client = mock_modbus_client.return_value
+    mock_client.write_registers.return_value = create_modbus_response([])
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await mock_hub.connect()
+
+        # A static APC setting write is tracked as uncommitted.
+        await mock_hub.write_registers(unit=1, address=61700, payload=[1, 0])
+        assert mock_hub.uncommitted_power_settings == [61700]
+
+        # A refresh whose tier includes the slow blocks warns exactly once.
+        mock_hub.initalized = True
+        mock_hub._keep_modbus_open = True
+        with caplog.at_level(logging.WARNING):
+            await mock_hub.async_refresh_modbus_data()
+            await mock_hub.async_refresh_modbus_data()
+        warnings = [r for r in caplog.records if "without a commit" in r.getMessage()]
+        assert len(warnings) == 1
+
+        # Commit clears the tracking and re-arms the warning.
+        await mock_hub.write_registers(unit=1, address=61696, payload=[1])
+        assert mock_hub.uncommitted_power_settings == []

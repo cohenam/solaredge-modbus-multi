@@ -230,6 +230,8 @@ class SolarEdgeModbusMultiHub:
         self._initalized = False
         self._online = True
         self._timeout_counter = 0
+        self._uncommitted_power_settings: set[int] = set()
+        self._uncommitted_warned = False
 
         # The factory resolves this module's AsyncModbusTcpClient at call
         # time, so tests patching hub.AsyncModbusTcpClient keep working.
@@ -569,6 +571,22 @@ class SolarEdgeModbusMultiHub:
         # writes that landed during the refresh stay pending for the next one.
         self._slow_poll_requests -= served_slow_poll_requests
 
+        # SolarEdge requires an explicit commit for static power-control
+        # settings to survive an inverter restart. Warn once per batch,
+        # after a slow poll has re-read the control blocks post-write.
+        if (
+            self.slow_poll_due
+            and self._uncommitted_power_settings
+            and not self._uncommitted_warned
+        ):
+            _LOGGER.warning(
+                "Power control settings at register(s) %s were written without "
+                "a commit; they will not persist across an inverter restart. "
+                "Press the Commit Power Settings button to persist them.",
+                sorted(self._uncommitted_power_settings),
+            )
+            self._uncommitted_warned = True
+
         if self._timeout_counter > 0:
             _LOGGER.debug(
                 f"Timeout count {self._timeout_counter} limit {self._retry_limit}"
@@ -610,6 +628,17 @@ class SolarEdgeModbusMultiHub:
 
         if result.isError():
             _LOGGER.debug(f"I{unit}: error result: {type(result)} ")
+
+            # Sanitized: type/code only, never payload or host details.
+            if type(result) is ExceptionResponse:
+                self._transport.stats.last_error = (
+                    f"read unit {unit}: ExceptionResponse"
+                    f"(code={result.exception_code})"
+                )
+            else:
+                self._transport.stats.last_error = (
+                    f"read unit {unit}: {type(result).__name__}"
+                )
 
             if type(result) is ModbusIOException:
                 raise ModbusIOError(result)
@@ -717,6 +746,19 @@ class SolarEdgeModbusMultiHub:
         # (not a flag) so an in-flight refresh can't consume this request.
         # Kept outside the try: it must run exactly once per write.
         self._slow_poll_requests += 1
+
+        # Track APC static settings pending an explicit commit (61696) or
+        # restore-defaults (61697); blocks span 61696-61781 and 61782-61865.
+        if address in (61696, 61697):
+            if self._uncommitted_power_settings:
+                _LOGGER.debug(
+                    "Power control settings %s committed/restored.",
+                    sorted(self._uncommitted_power_settings),
+                )
+            self._uncommitted_power_settings.clear()
+            self._uncommitted_warned = False
+        elif 61698 <= address <= 61865:
+            self._uncommitted_power_settings.add(address)
 
         try:
             if self.sleep_after_write > 0:
@@ -875,6 +917,16 @@ class SolarEdgeModbusMultiHub:
     def is_connected(self) -> bool:
         """Check modbus client connection status."""
         return self._transport.connected
+
+    @property
+    def uncommitted_power_settings(self) -> list[int]:
+        """APC static-setting registers written since the last commit."""
+        return sorted(self._uncommitted_power_settings)
+
+    @property
+    def transport_stats(self):
+        """Diagnostics-only transport counters."""
+        return self._transport.stats
 
     # Compatibility passthroughs: the client and session lock live in the
     # transport now, but tests (and any external code) still reach them

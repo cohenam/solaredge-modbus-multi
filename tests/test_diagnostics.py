@@ -781,3 +781,48 @@ class TestRedactionConstants:
         assert "B_SerialNumber" in REDACT_BATTERY
         assert "serial_number" in REDACT_BATTERY
         assert "via_device" in REDACT_BATTERY
+
+
+async def test_diagnostics_polling_section(
+    hass, mock_config_entry_data, mock_config_entry_options, mock_modbus_client
+) -> None:
+    """Diagnostics expose poll-tier state and sanitized transport stats."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock, patch
+
+    from custom_components.solaredge_modbus_multi.const import DOMAIN
+    from custom_components.solaredge_modbus_multi.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
+    from custom_components.solaredge_modbus_multi.hub import SolarEdgeModbusMultiHub
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN]["yaml"] = {}
+
+    hub = SolarEdgeModbusMultiHub(
+        hass,
+        entry_id="diag_test",
+        entry_data=mock_config_entry_data,
+        entry_options=mock_config_entry_options,
+    )
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await hub.connect()
+
+    entry = MagicMock()
+    entry.as_dict.return_value = {"data": {"host": "1.2.3.4"}}
+    entry.runtime_data = SimpleNamespace(hub=hub)
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+
+    polling = diagnostics["polling"]
+    assert polling["slow_poll_multiplier"] == hub._slow_poll_multiplier
+    assert polling["uncommitted_power_settings"] == []
+    assert polling["transport"]["connects"] == 1
+    assert polling["transport"]["reads"] == 0
+    assert polling["transport"]["last_error"] is None
+    # Redaction still applies to the config entry payload.
+    assert diagnostics["config_entry"]["data"]["host"] == "**REDACTED**"
