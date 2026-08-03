@@ -497,6 +497,7 @@ class SolarEdgeInverter:
                 inverter_data = await self.hub.modbus_read_holding_registers(
                     unit=self.inverter_unit_id, address=40119, rcount=2
                 )
+                self.hub.note_group_read(PollGroup.STATUS)
                 self.decoded_model.update(
                     dict(
                         [
@@ -543,6 +544,7 @@ class SolarEdgeInverter:
                 inverter_data = await self.hub.modbus_read_holding_registers(
                     unit=self.inverter_unit_id, address=40123, rcount=mmppt_registers
                 )
+                self.hub.note_group_read(PollGroup.MMPPT)
 
                 if self.decoded_mmppt["mmppt_Units"] in [2, 3]:
                     int16_fields = [
@@ -670,6 +672,7 @@ class SolarEdgeInverter:
                     inverter_data = await self.hub.modbus_read_holding_registers(
                         unit=self.inverter_unit_id, address=61440, rcount=4
                     )
+                    self.hub.note_group_read(PollGroup.SETTINGS)
 
                     self.decoded_model.update(
                         {
@@ -758,6 +761,7 @@ class SolarEdgeInverter:
                     inverter_data = await self.hub.modbus_read_holding_registers(
                         unit=self.inverter_unit_id, address=61696, rcount=86
                     )
+                    self.hub.note_group_read(PollGroup.SETTINGS)
 
                     int32_fields = APC_INT32_FIELDS
                     int32_data = (
@@ -925,6 +929,7 @@ class SolarEdgeInverter:
                 inverter_data = await self.hub.modbus_read_holding_registers(
                     unit=self.inverter_unit_id, address=57344, rcount=4
                 )
+                self.hub.note_group_read(PollGroup.SETTINGS)
 
                 self.decoded_model.update(
                     {
@@ -999,6 +1004,7 @@ class SolarEdgeInverter:
                 inverter_data = await self.hub.modbus_read_holding_registers(
                     unit=self.inverter_unit_id, address=40113, rcount=2
                 )
+                self.hub.note_group_read(PollGroup.STATUS)
 
                 self.decoded_model.update(
                     {
@@ -1050,6 +1056,7 @@ class SolarEdgeInverter:
                 inverter_data = await self.hub.modbus_read_holding_registers(
                     unit=self.inverter_unit_id, address=57348, rcount=14
                 )
+                self.hub.note_group_read(PollGroup.SETTINGS)
 
                 uint16_fields = [
                     "control_mode",

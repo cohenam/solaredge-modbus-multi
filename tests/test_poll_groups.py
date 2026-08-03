@@ -473,14 +473,53 @@ async def test_diagnostics_exposes_poll_groups(hass, make_hub) -> None:
     }
     assert polling["slow_poll_due"] is False
 
-    # Cadence evidence: cycle 0 served everything, cycle 1 only the base
-    # groups, so the tiered ones are still pinned to the cycle they last ran.
-    assert groups["core"]["last_served_cycle"] == 1
-    assert groups["meter"]["last_served_cycle"] == 0
-    assert groups["battery"]["last_served_cycle"] == 0
-    assert groups["settings"]["last_served_cycle"] == 0
+    # This hub has no devices, so "due" is all it can honestly claim: being
+    # scheduled is not evidence that anything was read.
+    assert all(
+        group["last_served_cycle"] is None for group in groups.values()
+    ), "cadence evidence must require an actual read"
 
     assert diagnostics["yaml"]["poll"] == {"meter": 2, "battery": 3}
+
+
+async def test_last_served_cycle_tracks_physical_reads(
+    make_hub, mock_modbus_client
+) -> None:
+    """`last_served_cycle` advances only for groups that really read."""
+    hub = make_hub({"battery": 2})
+    space = build_synergy_full_space()
+    calls: list[tuple[int, int]] = []
+    mock_client = mock_modbus_client.return_value
+    mock_client.read_holding_registers.side_effect = make_side_effect(space, {}, calls)
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await hub.connect()
+        inverter = SolarEdgeInverter(device_id=1, hub=hub)
+        await inverter.init_device()
+        hub.inverters = [inverter]
+        hub.initalized = True
+
+        await hub.async_refresh_modbus_data()  # cycle 0
+        groups = hub.poll_groups
+
+        assert groups["core"]["last_served_cycle"] == 0
+        assert groups["status"]["last_served_cycle"] == 0
+        assert groups["settings"]["last_served_cycle"] == 0
+        # No meter, battery or EVSE exists on this hub, so those groups were
+        # due but read nothing — they must not claim a served cycle.
+        for absent in ("meter", "battery", "evse"):
+            assert groups[absent]["due"] is True
+            assert groups[absent]["last_served_cycle"] is None
+
+        await hub.async_refresh_modbus_data()  # cycle 1
+        groups = hub.poll_groups
+
+        assert groups["core"]["last_served_cycle"] == 1
+        # settings is on the default multiplier, so it did not run again.
+        assert groups["settings"]["last_served_cycle"] == 0
 
 
 @pytest.mark.parametrize(("address", "capability", "probed_flag"), DETECT_PROBES)

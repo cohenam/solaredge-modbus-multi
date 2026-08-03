@@ -203,6 +203,7 @@ class SolarEdgeModbusMultiHub:
         # discovery and cycle 0 always see a complete picture.
         self._due_groups: set[PollGroup] = set(PollGroup)
         self._group_last_cycle: dict[PollGroup, int | None] = dict.fromkeys(PollGroup)
+        self._groups_read: set[PollGroup] = set()
         self._settings_read_incomplete = False
         self._retry_limit = self._yaml_config.get("retry", {}).get(
             "limit", RetrySettings.Limit
@@ -297,6 +298,15 @@ class SolarEdgeModbusMultiHub:
     def poll_due(self, group: PollGroup) -> bool:
         """Whether this refresh reads the blocks belonging to `group`."""
         return group in self._due_groups
+
+    def note_group_read(self, group: PollGroup) -> None:
+        """Record that a block belonging to `group` was actually read.
+
+        Being due is not evidence of anything: a group whose blocks are
+        disabled by options, or whose device list is empty, would otherwise
+        report a cadence it never performed.
+        """
+        self._groups_read.add(group)
 
     def note_settings_read_incomplete(self) -> None:
         """Record that a settings block did not answer this refresh.
@@ -573,21 +583,30 @@ class SolarEdgeModbusMultiHub:
         if served_slow_poll_requests > 0:
             self._due_groups.add(PollGroup.SETTINGS)
         self._settings_read_incomplete = False
+        self._groups_read = set()
 
         try:
             async with asyncio.timeout(self.coordinator_timeout):
                 # Read all devices sequentially with batch lock per device
                 for inv in self.inverters:
                     await self._poll_device_with_lock(inv)
+                if self.inverters:
+                    self.note_group_read(PollGroup.CORE)
                 if self.poll_due(PollGroup.METER):
                     for meter in self.meters:
                         await self._poll_device_with_lock(meter)
+                    if self.meters:
+                        self.note_group_read(PollGroup.METER)
                 if self.poll_due(PollGroup.BATTERY):
                     for bat in self.batteries:
                         await self._poll_device_with_lock(bat)
+                    if self.batteries:
+                        self.note_group_read(PollGroup.BATTERY)
                 if self.poll_due(PollGroup.EVSE):
                     for evse in self.evses:
                         await self._poll_device_with_lock(evse)
+                    if self.evses:
+                        self.note_group_read(PollGroup.EVSE)
 
         except (
             ModbusReadError,
@@ -624,9 +643,14 @@ class SolarEdgeModbusMultiHub:
 
         self._poll_cycle = next_cycle
 
-        settings_served = self.slow_poll_due and not self._settings_read_incomplete
-        for group in self._due_groups:
-            if group is PollGroup.SETTINGS and not settings_served:
+        # The forced-request accounting asks "did the settings poll run to
+        # completion" — which is true even where no settings block exists,
+        # otherwise a write on such a hub would leave the request pending
+        # forever. `last_served_cycle` asks the stricter question of whether
+        # anything was physically read, so it keys off _groups_read instead.
+        settings_complete = self.slow_poll_due and not self._settings_read_incomplete
+        for group in self._groups_read:
+            if group is PollGroup.SETTINGS and self._settings_read_incomplete:
                 continue
             self._group_last_cycle[group] = next_cycle
 
@@ -635,14 +659,14 @@ class SolarEdgeModbusMultiHub:
         # A settings block whose detect probe timed out is handled inside the
         # device read, so the refresh still "succeeds" — but it did not verify
         # the write, so the forced request must survive to the next cycle.
-        if settings_served:
+        if settings_complete:
             self._slow_poll_requests -= served_slow_poll_requests
 
         # SolarEdge requires an explicit commit for static power-control
         # settings to survive an inverter restart. Warn once per batch,
         # after a slow poll has re-read the control blocks post-write.
         if (
-            settings_served
+            settings_complete
             and self._uncommitted_power_settings
             and not self._uncommitted_warned
         ):

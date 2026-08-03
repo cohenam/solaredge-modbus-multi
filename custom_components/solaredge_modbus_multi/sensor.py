@@ -1277,10 +1277,10 @@ class SolarEdgeRRCR(SolarEdgeGlobalPowerControlBlock):
 
     @property
     def entity_registry_enabled_default(self) -> bool:
-        if self._platform.global_power_control is True:
-            return True
-        else:
-            return False
+        # `is not False`, not truthiness: a capability still undecided at setup
+        # must register enabled, because this is only consulted once and a
+        # later successful probe cannot re-enable a disabled registry entry.
+        return self._platform.global_power_control is not False
 
     @property
     def native_value(self):
@@ -1333,7 +1333,10 @@ class SolarEdgeActivePowerLimit(SolarEdgeGlobalPowerControlBlock):
 
     @property
     def entity_registry_enabled_default(self) -> bool:
-        return self._platform.global_power_control
+        # `is not False`, not truthiness: a capability still undecided at setup
+        # must register enabled, because this is only consulted once and a
+        # later successful probe cannot re-enable a disabled registry entry.
+        return self._platform.global_power_control is not False
 
     @property
     def native_value(self) -> int:
@@ -1365,7 +1368,10 @@ class SolarEdgeCosPhi(SolarEdgeGlobalPowerControlBlock):
 
     @property
     def entity_registry_enabled_default(self) -> bool:
-        return self._platform.global_power_control
+        # `is not False`, not truthiness: a capability still undecided at setup
+        # must register enabled, because this is only consulted once and a
+        # later successful probe cannot re-enable a disabled registry entry.
+        return self._platform.global_power_control is not False
 
     @property
     def native_value(self) -> float:

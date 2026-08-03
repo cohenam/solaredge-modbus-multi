@@ -6,6 +6,7 @@ import logging
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from pymodbus.client.mixin import ModbusClientMixin
@@ -73,7 +74,27 @@ class SolarEdgeRefreshButton(SolarEdgeButtonBase):
         await self.async_update()
 
 
-class SolarEdgeCommitControlSettings(SolarEdgeButtonBase):
+class SolarEdgeAdvancedPowerControlButton(SolarEdgeButtonBase):
+    """A button that writes an Advanced Power Control register.
+
+    These exist before detection resolves, so both the entity and the write
+    itself are gated on confirmed APC support: pressing one commits settings
+    to inverter flash, which must never happen on an unverified capability.
+    """
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._platform.advanced_power_control is True
+
+    def _assert_supported(self) -> None:
+        if self._platform.advanced_power_control is not True:
+            raise HomeAssistantError(
+                "Advanced Power Control is not confirmed on inverter ID "
+                f"{self._platform.inverter_unit_id}; refusing to write."
+            )
+
+
+class SolarEdgeCommitControlSettings(SolarEdgeAdvancedPowerControlButton):
     """Button to Commit Power Control Settings."""
 
     _attr_entity_category = EntityCategory.CONFIG
@@ -87,6 +108,7 @@ class SolarEdgeCommitControlSettings(SolarEdgeButtonBase):
     async def async_press(self) -> None:
         _LOGGER.debug(f"set {self.unique_id} to 1")
 
+        self._assert_supported()
         await self._platform.write_registers(
             address=61696,
             payload=ModbusClientMixin.convert_to_registers(
@@ -96,7 +118,7 @@ class SolarEdgeCommitControlSettings(SolarEdgeButtonBase):
         await self.async_update()
 
 
-class SolarEdgeDefaultControlSettings(SolarEdgeButtonBase):
+class SolarEdgeDefaultControlSettings(SolarEdgeAdvancedPowerControlButton):
     """Button to Restore Power Control Default Settings."""
 
     _attr_entity_category = EntityCategory.CONFIG
@@ -114,6 +136,7 @@ class SolarEdgeDefaultControlSettings(SolarEdgeButtonBase):
     async def async_press(self) -> None:
         _LOGGER.debug(f"set {self.unique_id} to 1")
 
+        self._assert_supported()
         await self._platform.write_registers(
             address=61697,
             payload=ModbusClientMixin.convert_to_registers(

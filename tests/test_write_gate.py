@@ -7,7 +7,7 @@ the hub refuses a write outright, before it can reach the transport.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -24,10 +24,19 @@ from custom_components.solaredge_modbus_multi.button import (
 from custom_components.solaredge_modbus_multi.const import DOMAIN, ConfName
 from custom_components.solaredge_modbus_multi.hub import SolarEdgeModbusMultiHub
 from custom_components.solaredge_modbus_multi.number import (
+    SolarEdgeActivePowerLimitSet,
+    SolarEdgeCosPhiSet,
+)
+from custom_components.solaredge_modbus_multi.number import (
     async_setup_entry as number_setup_entry,
 )
 from custom_components.solaredge_modbus_multi.select import (
     async_setup_entry as select_setup_entry,
+)
+from custom_components.solaredge_modbus_multi.sensor import (
+    SolarEdgeActivePowerLimit,
+    SolarEdgeCosPhi,
+    SolarEdgeRRCR,
 )
 from custom_components.solaredge_modbus_multi.switch import (
     async_setup_entry as switch_setup_entry,
@@ -79,6 +88,15 @@ def platform_entry(mock_coordinator_stub):
         return entry
 
     return _build
+
+
+@pytest.fixture
+def mock_config_entry_stub():
+    """Minimal config entry double for entity construction."""
+    entry = MagicMock()
+    entry.entry_id = "test_entry_123"
+    entry.data = {"name": "Test SolarEdge"}
+    return entry
 
 
 @pytest.fixture
@@ -269,3 +287,152 @@ async def test_button_adds_control_buttons_when_enabled(
         SolarEdgeCommitControlSettings,
         SolarEdgeDefaultControlSettings,
     ]
+
+
+# --- APC buttons must not act on an unverified capability -------------------
+
+
+@pytest.fixture
+def apc_button_platform(mock_coordinator_stub):
+    """A device stub whose APC capability can be moved between states."""
+
+    def _build(capability):
+        platform = MagicMock()
+        platform.advanced_power_control = capability
+        platform.inverter_unit_id = 1
+        platform.online = True
+        platform.uid_base = "SE10K_123456789"
+        platform.write_registers = AsyncMock()
+        return platform
+
+    return _build
+
+
+@pytest.mark.parametrize(
+    "button_class",
+    [SolarEdgeCommitControlSettings, SolarEdgeDefaultControlSettings],
+    ids=["commit", "default"],
+)
+@pytest.mark.parametrize(
+    ("capability", "expected"),
+    [(None, False), (False, False), (True, True)],
+    ids=["undecided", "unsupported", "supported"],
+)
+def test_apc_button_availability_follows_capability(
+    apc_button_platform,
+    mock_config_entry_stub,
+    mock_coordinator_stub,
+    button_class,
+    capability,
+    expected,
+) -> None:
+    """These buttons exist before detection resolves, so they must self-gate."""
+    button = button_class(
+        apc_button_platform(capability), mock_config_entry_stub, mock_coordinator_stub
+    )
+
+    assert button.available is expected
+
+
+@pytest.mark.parametrize(
+    ("button_class", "address"),
+    [
+        (SolarEdgeCommitControlSettings, 61696),
+        (SolarEdgeDefaultControlSettings, 61697),
+    ],
+    ids=["commit", "default"],
+)
+@pytest.mark.parametrize("capability", [None, False], ids=["undecided", "unsupported"])
+async def test_apc_button_refuses_write_without_capability(
+    apc_button_platform,
+    mock_config_entry_stub,
+    mock_coordinator_stub,
+    button_class,
+    address,
+    capability,
+) -> None:
+    """Availability is advisory; a service call can still press the button.
+
+    61696 commits settings to inverter flash, so the write path itself has to
+    refuse rather than rely on the entity being hidden.
+    """
+    platform = apc_button_platform(capability)
+    button = button_class(platform, mock_config_entry_stub, mock_coordinator_stub)
+
+    with pytest.raises(HomeAssistantError, match="not confirmed"):
+        await button.async_press()
+
+    platform.write_registers.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("button_class", "address"),
+    [
+        (SolarEdgeCommitControlSettings, 61696),
+        (SolarEdgeDefaultControlSettings, 61697),
+    ],
+    ids=["commit", "default"],
+)
+async def test_apc_button_writes_once_capability_confirmed(
+    apc_button_platform,
+    mock_config_entry_stub,
+    mock_coordinator_stub,
+    button_class,
+    address,
+) -> None:
+    """Regression guard: the capability check is the only thing blocking."""
+    platform = apc_button_platform(True)
+    button = button_class(platform, mock_config_entry_stub, mock_coordinator_stub)
+    button.async_update = AsyncMock()
+
+    await button.async_press()
+
+    assert platform.write_registers.await_args.kwargs["address"] == address
+
+
+# --- an undecided capability must not disable the registry entry ------------
+
+
+@pytest.mark.parametrize(
+    "entity_class",
+    [
+        SolarEdgeRRCR,
+        SolarEdgeActivePowerLimit,
+        SolarEdgeCosPhi,
+        SolarEdgeActivePowerLimitSet,
+    ],
+    ids=["rrcr", "active_power_limit", "cosphi", "active_power_limit_set"],
+)
+@pytest.mark.parametrize(
+    ("capability", "expected"),
+    [(None, True), (True, True), (False, False)],
+    ids=["undecided", "supported", "unsupported"],
+)
+def test_gpc_registry_default_treats_undecided_as_enabled(
+    mock_config_entry_stub, mock_coordinator_stub, entity_class, capability, expected
+) -> None:
+    """Home Assistant reads this once, when the entity is first registered.
+
+    A capability still undecided at setup must not register disabled: nothing
+    re-enables a disabled registry entry when detection later succeeds, so the
+    entity would stay missing until the integration is reloaded.
+    """
+    platform = MagicMock()
+    platform.global_power_control = capability
+    platform.uid_base = "SE10K_123456789"
+    entity = entity_class(platform, mock_config_entry_stub, mock_coordinator_stub)
+
+    assert entity.entity_registry_enabled_default is expected
+
+
+def test_cosphi_set_stays_disabled_by_default(
+    mock_config_entry_stub, mock_coordinator_stub
+) -> None:
+    """CosPhi Set is deliberately opt-in and must not follow the capability."""
+    platform = MagicMock()
+    platform.global_power_control = True
+    platform.uid_base = "SE10K_123456789"
+
+    entity = SolarEdgeCosPhiSet(platform, mock_config_entry_stub, mock_coordinator_stub)
+
+    assert entity.entity_registry_enabled_default is False
