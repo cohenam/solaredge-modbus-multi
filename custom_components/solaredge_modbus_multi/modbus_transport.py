@@ -33,6 +33,7 @@ import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import NamedTuple, NoReturn
 
 from modbus_connection import ModbusTcpParams
 from modbus_connection.exceptions import (
@@ -69,13 +70,10 @@ class PollStats:
     last_error: str | None = field(default=None, repr=False)
 
 
-class ModbusReadResult:
+class ModbusReadResult(NamedTuple):
     """Wrap a register list so callers keep the `.registers` interface."""
 
-    __slots__ = ("registers",)
-
-    def __init__(self, registers: list[int]) -> None:
-        self.registers = registers
+    registers: list[int]
 
 
 def _is_cancellation(exc: BaseException) -> bool:
@@ -121,20 +119,11 @@ class ModbusTransport:
         port: int,
         *,
         timeout: int,
-        retries: int = 0,
-        reconnect_delay: float = 0,
-        reconnect_delay_max: float = 0,
         connection_factory: Callable[..., ModbusConnection] | None = None,
     ) -> None:
         self._host = host
         self._port = port
         self._timeout = timeout
-        # Accepted for call-site compatibility. modbus-connection issues each
-        # request once and reconnects on demand, so these are no longer ours
-        # to set; the enclosing deadlines already pre-empted pymodbus retries.
-        self._retries = retries
-        self._reconnect_delay = reconnect_delay
-        self._reconnect_delay_max = reconnect_delay_max
         self._connection_factory = connection_factory
 
         self._connection: ModbusConnection | None = None
@@ -269,20 +258,22 @@ class ModbusTransport:
             await self._shielded_recycle()
             raise
 
-    async def disconnect(self, clear_client: bool = False) -> None:
-        """Close the session.
-
-        Every close is a recycle now: the library cannot reopen a closed
-        connection, so `clear_client` no longer distinguishes anything. It
-        is kept so call sites read unchanged.
-        """
-        if self._held_by_current_task():
-            await self._recycle_unlocked()
-            return
-        async with self._lock:
-            await self._recycle_unlocked()
-
     # -- register i/o ------------------------------------------------------
+
+    def _raise_for_exception_pdu(
+        self, op: str, unit: int, e: ModbusExceptionError, default: type[Exception]
+    ) -> NoReturn:
+        """Map an exception PDU: the device answered, just not with data.
+
+        Sanitized: type and code only, never payload or host.
+        """
+        self.stats.last_error = (
+            f"{op} unit {unit}: ExceptionResponse(code={e.exception_code})"
+        )
+        illegal = _illegal_for(e.exception_code)
+        if illegal is not None:
+            raise illegal(e)
+        raise default(e)
 
     async def read_holding_registers_raw(
         self, unit: int, address: int, count: int
@@ -318,15 +309,7 @@ class ModbusTransport:
             raise
 
         except ModbusExceptionError as e:
-            # The device answered, just not with data. Sanitized: type and
-            # code only, never payload or host.
-            self.stats.last_error = (
-                f"read unit {unit}: ExceptionResponse(code={e.exception_code})"
-            )
-            illegal = _illegal_for(e.exception_code)
-            if illegal is not None:
-                raise illegal(e)
-            raise ModbusReadError(e)
+            self._raise_for_exception_pdu("read", unit, e, ModbusReadError)
 
         except ModbusError as e:
             # Anything that is not an exception PDU: no usable answer, a
@@ -364,13 +347,7 @@ class ModbusTransport:
                 raise
 
             except ModbusExceptionError as e:
-                self.stats.last_error = (
-                    f"write unit {unit}: ExceptionResponse(code={e.exception_code})"
-                )
-                illegal = _illegal_for(e.exception_code)
-                if illegal is not None:
-                    raise illegal(e)
-                raise ModbusWriteError(e)
+                self._raise_for_exception_pdu("write", unit, e, ModbusWriteError)
 
             except ModbusError as e:
                 # Only an exception PDU proves the device refused the frame and
