@@ -503,7 +503,25 @@ class SolarEdgeModbusMultiHub:
     async def async_refresh_modbus_data(self) -> bool:
         """Refresh modbus data from inverters."""
 
-        await self.connect()
+        try:
+            await self.connect()
+        except ModbusIOError as e:
+            # A refused connection must reach the coordinator as one of our
+            # failure types with its repair issue raised, not as a bare
+            # transport error that bypasses both.
+            self.online = False
+            ir.async_create_issue(
+                self._hass,
+                DOMAIN,
+                check_config_issue_id(self._entry_id),
+                is_fixable=True,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="check_configuration",
+                data={"entry_id": self._entry_id},
+            )
+            if not self.initalized:
+                raise HubInitFailed(f"Setup failed: {e}")
+            raise DataUpdateFailed(f"Connection failed: {e}")
 
         if not self.initalized:
             try:

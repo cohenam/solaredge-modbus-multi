@@ -29,6 +29,7 @@ from custom_components.solaredge_modbus_multi.exceptions import (
 )
 from custom_components.solaredge_modbus_multi.modbus_transport import ModbusTransport
 from tests.conftest import connection_double
+from tests.fake_modbus_server import FakeModbusServer
 
 
 @pytest.fixture
@@ -229,3 +230,114 @@ async def test_hold_session_excludes_other_tasks(transport) -> None:
         assert not task.done(), "another task entered the held session"
 
     await task
+
+
+# --- cancellation, against real sockets and the real library ----------------
+#
+# pymodbus catches a CancelledError raised into an in-flight request and
+# reports it as an I/O error, which the library reports as a timeout. These
+# use a real connection because that laundering only happens in the real
+# dependency — a mock would raise CancelledError straight through and prove
+# nothing.
+
+
+@pytest.fixture(autouse=False)
+def _allow_sockets(socket_enabled):
+    """These tests intentionally use real localhost sockets."""
+    yield
+
+
+@pytest.fixture
+def make_server():
+    servers: list[FakeModbusServer] = []
+
+    async def _make(**kwargs) -> FakeModbusServer:
+        server = FakeModbusServer(**kwargs)
+        await server.start()
+        servers.append(server)
+        return server
+
+    yield _make
+
+
+def _real_transport(port: int, *, timeout: float) -> ModbusTransport:
+    return ModbusTransport(host="127.0.0.1", port=port, timeout=timeout)
+
+
+async def test_outer_deadline_surfaces_as_timeout_error(
+    _allow_sockets, make_server
+) -> None:
+    """The whole-poll budget must still reach the coordinator as a timeout.
+
+    It is what the hub's timeout counter and the retry limit key on; if a
+    deadline arrived as ModbusIOError instead, a hub that never answers would
+    never trip the limit.
+    """
+    server = await make_server(silent_units={1}, spaces={1: {}})
+    transport = _real_transport(server.port, timeout=30)
+
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0.25):
+            await _read(transport)
+
+    await transport.recycle()
+
+
+async def test_explicit_cancellation_actually_cancels(
+    _allow_sockets, make_server
+) -> None:
+    """An unload cancelling the poll must not be swallowed as an I/O error."""
+    server = await make_server(silent_units={1}, spaces={1: {}})
+    transport = _real_transport(server.port, timeout=30)
+
+    task = asyncio.create_task(_read(transport))
+    await asyncio.sleep(0.15)  # let the request reach the wire
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert task.cancelled()
+    await transport.recycle()
+
+
+async def test_plain_request_timeout_is_io_error(_allow_sockets, make_server) -> None:
+    """Without a deadline or a cancellation it stays an ordinary I/O failure."""
+    server = await make_server(silent_units={1}, spaces={1: {}})
+    transport = _real_transport(server.port, timeout=0.25)
+
+    with pytest.raises(ModbusIOError) as caught:
+        await _read(transport)
+
+    assert not isinstance(caught.value, TimeoutError)
+    assert transport.stats.recycles == 1
+
+
+async def test_refused_connection_is_io_error(_allow_sockets, make_server) -> None:
+    """A refused connect must be normalised, not escape as a library type."""
+    server = await make_server(spaces={1: {}})
+    port = server.port
+    await server.stop()
+
+    transport = _real_transport(port, timeout=1)
+
+    with pytest.raises(ModbusIOError):
+        await transport.connect()
+
+
+async def test_generic_write_error_is_also_an_unknown_outcome(transport) -> None:
+    """A library error can be raised after function 16 already went out.
+
+    Only an exception PDU proves the device refused and applied nothing, so
+    anything else must retire the socket and be reported as unknown rather
+    than as a definite failure a caller might re-send after.
+    """
+    await transport.connect()
+    connection = transport.built[-1]
+    connection.write_registers.side_effect = ModbusError("garbled")
+
+    with pytest.raises(ModbusIOError, match="may or may not have been applied"):
+        await transport.write_registers_raw(1, 61696, [1])
+
+    assert connection.write_registers.await_count == 1
+    assert transport.stats.recycles == 1

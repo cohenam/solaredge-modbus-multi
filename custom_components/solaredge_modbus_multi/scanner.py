@@ -169,7 +169,7 @@ class SolarEdgeDeviceScanner:
                 _LOGGER.warning(
                     f"Timeout occurred while connecting to {self._host}:{self._port}"
                 )
-            except OSError as e:
+            except (OSError, ModbusIOError) as e:
                 _LOGGER.warning(
                     f"Network error connecting to {self._host}:{self._port}: {e}"
                 )

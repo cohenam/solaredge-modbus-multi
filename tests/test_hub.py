@@ -498,7 +498,13 @@ async def test_write_registers_success(mock_hub, mock_modbus_client) -> None:
 async def test_write_registers_generic_modbus_error(
     mock_hub, mock_modbus_client
 ) -> None:
-    """Test write fails with a library error that is not a lost response."""
+    """A generic library error on a write is an unknown outcome, not a failure.
+
+    Only an exception PDU proves the device refused the frame and applied
+    nothing. Anything else can be raised after function 16 went out, so the
+    write must not be reported as definitely failed — a caller that believed
+    it could reasonably re-send to a power-control register.
+    """
     mock_client = mock_modbus_client.return_value
     mock_client.write_registers.side_effect = ModbusError("IO Error")
 
@@ -508,8 +514,10 @@ async def test_write_registers_generic_modbus_error(
     ):
         await mock_hub.connect()
 
-        with pytest.raises(HomeAssistantError, match="Error sending command"):
+        with pytest.raises(HomeAssistantError, match="may or may not have been"):
             await mock_hub.write_registers(unit=1, address=40000, payload=[100])
+
+        assert mock_client.write_registers.await_count == 1
 
 
 async def test_write_registers_connection_error(mock_hub, mock_modbus_client) -> None:

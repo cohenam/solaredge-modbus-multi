@@ -39,7 +39,6 @@ from modbus_connection.exceptions import (
     ModbusConnectionError,
     ModbusError,
     ModbusExceptionError,
-    ModbusProtocolError,
     ModbusTimeoutError,
 )
 from modbus_connection.pymodbus import ModbusConnection
@@ -77,6 +76,31 @@ class ModbusReadResult:
 
     def __init__(self, registers: list[int]) -> None:
         self.registers = registers
+
+
+def _is_cancellation(exc: BaseException) -> bool:
+    """Whether this failure is really a cancellation wearing a disguise.
+
+    pymodbus catches the CancelledError raised into an in-flight request and
+    reports ModbusIOException("Request cancelled outside library"), which the
+    library then reports as a timeout. Left alone that would silently convert
+    two very different things: an expired whole-poll deadline (which must
+    reach the coordinator as TimeoutError to count against its retry limit)
+    and an unload cancelling the task (which must actually cancel).
+    """
+    task = asyncio.current_task()
+    if task is not None and task.cancelling() > 0:
+        return True
+
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, asyncio.CancelledError):
+            return True
+        current = current.__cause__ or current.__context__
+
+    return False
 
 
 def _illegal_for(code: int | None):
@@ -273,21 +297,17 @@ class ModbusTransport:
                 raise illegal(e)
             raise ModbusReadError(e)
 
-        except (ModbusTimeoutError, ModbusConnectionError, ModbusProtocolError) as e:
-            # No usable answer: the socket may be half-open or desynchronised,
-            # so the generation is retired rather than reused. Deliberately
-            # ModbusIOError and not TimeoutError — see the module docstring.
-            self.stats.last_error = f"read unit {unit}: {type(e).__name__}"
-            await self._recycle_unlocked()
-            raise ModbusIOError(e)
-
         except ModbusError as e:
-            # A malformed or unrecognised answer, not an exception PDU. Treat
-            # it as a transport failure so callers can retry — only a real
-            # exception PDU is evidence that a device is there and answering,
-            # which is what the ID scanner keys its classification on.
+            # Anything that is not an exception PDU: no usable answer, a
+            # malformed frame, or a cancellation pymodbus swallowed. The socket
+            # may be half-open or desynchronised either way, so the generation
+            # is retired rather than reused. Note only a real exception PDU is
+            # evidence a device is answering — the ID scanner keys on that.
             self.stats.last_error = f"read unit {unit}: {type(e).__name__}"
             await self._recycle_unlocked()
+            if _is_cancellation(e):
+                raise asyncio.CancelledError from e
+            # Deliberately ModbusIOError, never TimeoutError — see the helper.
             raise ModbusIOError(e)
 
         return ModbusReadResult(registers)
@@ -314,21 +334,20 @@ class ModbusTransport:
                     raise illegal(e)
                 raise ModbusWriteError(e)
 
-            except (
-                ModbusTimeoutError,
-                ModbusConnectionError,
-                ModbusProtocolError,
-            ) as e:
+            except ModbusError as e:
+                # Only an exception PDU proves the device refused the frame and
+                # applied nothing. Every other failure — lost response, garbled
+                # frame, swallowed cancellation — can happen after function 16
+                # went out, so the outcome is unknown and the caller must never
+                # re-send on its own.
                 self.stats.last_error = f"write unit {unit}: {type(e).__name__}"
                 await self._recycle_unlocked()
+                if _is_cancellation(e):
+                    raise asyncio.CancelledError from e
                 raise ModbusIOError(
-                    f"No response to write at {address} on unit {unit}; "
-                    f"the write may or may not have been applied: {e}"
+                    f"No confirmed response to write at {address} on unit "
+                    f"{unit}; the write may or may not have been applied: {e}"
                 )
-
-            except ModbusError as e:
-                self.stats.last_error = f"write unit {unit}: {type(e).__name__}"
-                raise ModbusWriteError(e)
 
     def set_unit_spacing(self, unit: int, seconds: float) -> None:
         """Set (or clear, with 0) a minimum gap between one unit's requests."""

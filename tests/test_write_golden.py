@@ -15,18 +15,26 @@ ModbusClientMixin.convert_to_registers, the helper production itself
 calls, because a golden that shares an encoder with the code under test
 cannot detect that encoder changing.
 
-Generated on first run (tests/fixtures/write_golden.json); if a change
-is intentional, delete the fixture and re-run to regenerate — then
-re-verify the new payloads against the register spec before committing.
+The fixture (tests/fixtures/write_golden.json) is committed evidence, not
+a cache: a missing one fails the test rather than being regenerated,
+because a gate that passes without its evidence is not a gate. To rebuild
+it deliberately, run with SOLAREDGE_REGENERATE_WRITE_GOLDEN=1 — which
+rewrites it and then fails, so the new payloads have to be re-verified
+against the register spec before they can be committed.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from custom_components.solaredge_modbus_multi import button, number, select, switch
+
+REGENERATE_ENV = "SOLAREDGE_REGENERATE_WRITE_GOLDEN"
 
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "write_golden.json"
 
@@ -273,15 +281,28 @@ async def test_write_payload_golden() -> None:
 
     rendered = json.dumps(rows, indent=1, sort_keys=True) + "\n"
 
-    if not GOLDEN_PATH.exists():
+    if os.environ.get(REGENERATE_ENV):
         GOLDEN_PATH.parent.mkdir(parents=True, exist_ok=True)
         GOLDEN_PATH.write_text(rendered)
-        return
+        pytest.fail(
+            f"{REGENERATE_ENV} was set, so {GOLDEN_PATH.name} was rewritten. "
+            "Review the diff against the register spec, commit it, and re-run "
+            "without the variable."
+        )
+
+    # Deliberately not generate-on-missing: this is the hardware gate for live
+    # power-control registers, and a gate that passes when its evidence is
+    # absent is not a gate.
+    assert GOLDEN_PATH.exists(), (
+        f"{GOLDEN_PATH} is missing. It is committed evidence, not a cache — "
+        f"restore it from git. To rebuild deliberately, run with "
+        f"{REGENERATE_ENV}=1."
+    )
 
     assert json.loads(rendered) == json.loads(GOLDEN_PATH.read_text()), (
         "Modbus write payload drift detected. These are live inverter "
         "power-control registers: verify against the register spec before "
-        f"accepting. If intentional, delete {GOLDEN_PATH} and re-run."
+        f"accepting. If intentional, re-run with {REGENERATE_ENV}=1."
     )
 
 
