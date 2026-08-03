@@ -49,7 +49,6 @@ from .devices import (
     SolarEdgeMeter,
     SolarEdgeMMPPTUnit,
     decode_sunspec_common_block,
-    decode_sunspec_string,
     drop_decoded,
     log_decoded,
 )
@@ -102,7 +101,6 @@ __all__ = [
     "async_delete_entry_issues",
     "check_config_issue_id",
     "decode_sunspec_common_block",
-    "decode_sunspec_string",
     "detect_timeout_issue_id",
     "drop_decoded",
     "log_decoded",
@@ -200,17 +198,12 @@ class SolarEdgeModbusMultiHub:
         self._retry_limit = self._yaml_config.get("retry", {}).get(
             "limit", RetrySettings.Limit
         )
-        self._mb_reconnect_delay = self._yaml_config.get("modbus", {}).get(
-            "reconnect_delay", ModbusDefaults.ReconnectDelay
-        )
-        self._mb_reconnect_delay_max = self._yaml_config.get("modbus", {}).get(
-            "reconnect_delay_max", ModbusDefaults.ReconnectDelayMax
-        )
+        # Of the YAML `modbus:` options only `timeout` still reaches the
+        # transport: modbus-connection issues each request once and reconnects
+        # on demand, so retries and reconnect delays are no longer ours to
+        # set. The keys stay accepted for configuration compatibility.
         self._mb_timeout = self._yaml_config.get("modbus", {}).get(
             "timeout", ModbusDefaults.Timeout
-        )
-        self._mb_retries = self._yaml_config.get("modbus", {}).get(
-            "retries", ModbusDefaults.Retries
         )
         self._id = entry_data[CONF_NAME].lower()
         self.inverters = []
@@ -231,9 +224,6 @@ class SolarEdgeModbusMultiHub:
             host=self._host,
             port=self._port,
             timeout=self._mb_timeout,
-            retries=self._mb_retries,
-            reconnect_delay=self._mb_reconnect_delay,
-            reconnect_delay_max=self._mb_reconnect_delay_max,
         )
 
         self._pymodbus_version = pymodbus_version
@@ -589,28 +579,24 @@ class SolarEdgeModbusMultiHub:
         self._settings_read_incomplete = False
         self._groups_read = set()
 
+        # CORE's multiplier is pinned to 1, so its poll_due is always true.
+        device_groups = (
+            (PollGroup.CORE, self.inverters),
+            (PollGroup.METER, self.meters),
+            (PollGroup.BATTERY, self.batteries),
+            (PollGroup.EVSE, self.evses),
+        )
+
         try:
             async with asyncio.timeout(self.coordinator_timeout):
                 # Read all devices sequentially with batch lock per device
-                for inv in self.inverters:
-                    await self._poll_device_with_lock(inv)
-                if self.inverters:
-                    self.note_group_read(PollGroup.CORE)
-                if self.poll_due(PollGroup.METER):
-                    for meter in self.meters:
-                        await self._poll_device_with_lock(meter)
-                    if self.meters:
-                        self.note_group_read(PollGroup.METER)
-                if self.poll_due(PollGroup.BATTERY):
-                    for bat in self.batteries:
-                        await self._poll_device_with_lock(bat)
-                    if self.batteries:
-                        self.note_group_read(PollGroup.BATTERY)
-                if self.poll_due(PollGroup.EVSE):
-                    for evse in self.evses:
-                        await self._poll_device_with_lock(evse)
-                    if self.evses:
-                        self.note_group_read(PollGroup.EVSE)
+                for group, devices in device_groups:
+                    if not self.poll_due(group):
+                        continue
+                    for device in devices:
+                        await self._poll_device_with_lock(device)
+                    if devices:
+                        self.note_group_read(group)
 
         except (
             ModbusReadError,
@@ -629,7 +615,7 @@ class SolarEdgeModbusMultiHub:
             raise DataUpdateFailed(f"Connection failed: {e}")
 
         except TimeoutError as e:
-            await self.disconnect(clear_client=True)
+            await self.disconnect()
             self._timeout_counter += 1
 
             _LOGGER.debug(
@@ -649,7 +635,9 @@ class SolarEdgeModbusMultiHub:
         # otherwise a write on such a hub would leave the request pending
         # forever. `last_served_cycle` asks the stricter question of whether
         # anything was physically read, so it keys off _groups_read instead.
-        settings_complete = self.slow_poll_due and not self._settings_read_incomplete
+        settings_complete = (
+            self.poll_due(PollGroup.SETTINGS) and not self._settings_read_incomplete
+        )
         for group in self._groups_read:
             if group is PollGroup.SETTINGS and self._settings_read_incomplete:
                 continue
@@ -689,16 +677,14 @@ class SolarEdgeModbusMultiHub:
             await self.disconnect()
 
         # Timestamps follow physical reads: a device whose group was skipped
-        # must not claim a refresh it never got.
+        # must not claim a refresh it never got. EVSE devices do not track a
+        # last-update timestamp.
         timestamp = dt.now()
-        for inverter in self.inverters:
-            inverter.set_last_update(timestamp)
-        if self.poll_due(PollGroup.METER):
-            for meter in self.meters:
-                meter.set_last_update(timestamp)
-        if self.poll_due(PollGroup.BATTERY):
-            for battery in self.batteries:
-                battery.set_last_update(timestamp)
+        for group, devices in device_groups:
+            if group is PollGroup.EVSE or not self.poll_due(group):
+                continue
+            for device in devices:
+                device.set_last_update(timestamp)
 
         return True
 
@@ -706,22 +692,34 @@ class SolarEdgeModbusMultiHub:
         """Connect to inverter."""
         await self._transport.connect()
 
-    async def disconnect(self, clear_client: bool = False) -> None:
-        """Disconnect from inverter."""
-        await self._transport.disconnect(clear_client)
+    async def disconnect(self) -> None:
+        """Disconnect from inverter, retiring the connection generation."""
+        await self._transport.recycle()
 
     async def shutdown(self) -> None:
         """Shut down the hub and disconnect."""
 
         self.online = False
-        await self.disconnect(clear_client=True)
+        await self.disconnect()
 
-    def _validate_read_result(self, unit, address, rcount, result):
-        """Enforce the register count.
+    async def modbus_read_holding_registers(
+        self, unit, address, rcount, group: PollGroup | None = None
+    ):
+        """Read modbus registers from inverter.
 
         Error responses are already mapped to our exception hierarchy by the
-        transport, which is where the library's types stop.
+        transport, which is where the library's types stop. When `group` is
+        given, a validated response records a served read for that poll
+        group, so cadence evidence stays keyed to physical reads.
         """
+
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                f"I{unit}: modbus_read_holding_registers "
+                f"address={address} count={rcount}"
+            )
+
+        result = await self._transport.read_holding_registers_raw(unit, address, rcount)
 
         if _LOGGER.isEnabledFor(logging.DEBUG):
             _LOGGER.debug(
@@ -736,19 +734,10 @@ class SolarEdgeModbusMultiHub:
                 f"{len(result.registers)} != {rcount} at {address}"
             )
 
+        if group is not None:
+            self.note_group_read(group)
+
         return result
-
-    async def modbus_read_holding_registers(self, unit, address, rcount):
-        """Read modbus registers from inverter."""
-
-        if _LOGGER.isEnabledFor(logging.DEBUG):
-            _LOGGER.debug(
-                f"I{unit}: modbus_read_holding_registers "
-                f"address={address} count={rcount}"
-            )
-
-        result = await self._transport.read_holding_registers_raw(unit, address, rcount)
-        return self._validate_read_result(unit, address, rcount, result)
 
     async def _poll_device_with_lock(self, device) -> None:
         """Poll a single device while holding the modbus session.
@@ -925,16 +914,6 @@ class SolarEdgeModbusMultiHub:
     @property
     def option_detect_extras(self) -> bool:
         return self._detect_extras
-
-    @property
-    def poll_multipliers(self) -> dict[str, int]:
-        """Resolved cadence per group."""
-        return {f"{group}": self._poll_multipliers[group] for group in PollGroup}
-
-    @property
-    def due_groups(self) -> list[str]:
-        """Groups this refresh is reading."""
-        return sorted(f"{group}" for group in self._due_groups)
 
     @property
     def poll_groups(self) -> dict[str, dict[str, int | bool | None]]:

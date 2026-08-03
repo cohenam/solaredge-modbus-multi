@@ -229,9 +229,6 @@ async def test_transport_write_is_atomic_function_16(make_server) -> None:
         host="127.0.0.1",
         port=server.port,
         timeout=1,
-        retries=0,
-        reconnect_delay=0,
-        reconnect_delay_max=0,
     )
     try:
         await transport.connect()
@@ -239,7 +236,7 @@ async def test_transport_write_is_atomic_function_16(make_server) -> None:
         # nothing and reports every failure through our exception hierarchy.
         await transport.write_registers_raw(1, 57348, [1, 17274, 17530])
     finally:
-        await transport.disconnect(clear_client=True)
+        await transport.recycle()
         await server.stop()
 
     assert server.writes == [(1, 57348, [1, 17274, 17530])]

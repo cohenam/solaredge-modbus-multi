@@ -188,9 +188,18 @@ def drop_decoded(decoded: dict, keys) -> None:
         decoded.pop(key, None)
 
 
-def decode_sunspec_string(registers: list[int]) -> str:
-    """Decode a SunSpec string field from a span of UINT16 registers."""
-    return int_list_to_string(registers)
+def decode_fields(
+    fields: list[str], registers: list[int], decoder, size: int, **decoder_kwargs
+) -> dict:
+    """Decode consecutive `size`-register chunks into a {field: value} dict.
+
+    `registers` must hold exactly `size` registers per field (strict zip).
+    """
+    values = [
+        decoder(registers[i : i + size], **decoder_kwargs)
+        for i in range(0, len(registers), size)
+    ]
+    return dict(zip(fields, values, strict=True))
 
 
 def decode_sunspec_common_block(registers: list[int]) -> dict:
@@ -211,11 +220,11 @@ def decode_sunspec_common_block(registers: list[int]) -> dict:
 
     decoded.update(
         {
-            "C_Manufacturer": decode_sunspec_string(registers[2:18]),  # string(32)
-            "C_Model": decode_sunspec_string(registers[18:34]),  # string(32)
-            "C_Option": decode_sunspec_string(registers[34:42]),  # string(16)
-            "C_Version": decode_sunspec_string(registers[42:50]),  # string(16)
-            "C_SerialNumber": decode_sunspec_string(registers[50:66]),  # string(32)
+            "C_Manufacturer": int_list_to_string(registers[2:18]),  # string(32)
+            "C_Model": int_list_to_string(registers[18:34]),  # string(32)
+            "C_Option": int_list_to_string(registers[34:42]),  # string(16)
+            "C_Version": int_list_to_string(registers[42:50]),  # string(16)
+            "C_SerialNumber": int_list_to_string(registers[50:66]),  # string(32)
         }
     )
 
@@ -376,7 +385,7 @@ class SolarEdgeInverter:
             # C_Version: registers[0:8] (address 40044-40051). Static at runtime and
             # already decoded in init_device — skip the per-cycle re-decode.
             if "C_Version" not in self.decoded_common:
-                self.decoded_common["C_Version"] = decode_sunspec_string(
+                self.decoded_common["C_Version"] = int_list_to_string(
                     inverter_data.registers[0:8]
                 )
 
@@ -453,13 +462,7 @@ class SolarEdgeInverter:
             )
 
             self.decoded_model.update(
-                dict(
-                    zip(
-                        int16_fields,
-                        [decode_int16([r]) for r in int16_data],
-                        strict=True,
-                    )
-                )
+                decode_fields(int16_fields, int16_data, decode_int16, size=1)
             )
 
             self.decoded_model.update(
@@ -470,9 +473,11 @@ class SolarEdgeInverter:
 
             if self.use_status_vendor4 and self.hub.poll_due(PollGroup.STATUS):
                 inverter_data = await self.hub.modbus_read_holding_registers(
-                    unit=self.inverter_unit_id, address=40119, rcount=2
+                    unit=self.inverter_unit_id,
+                    address=40119,
+                    rcount=2,
+                    group=PollGroup.STATUS,
                 )
-                self.hub.note_group_read(PollGroup.STATUS)
                 self.decoded_model.update(
                     dict(
                         [
@@ -514,9 +519,11 @@ class SolarEdgeInverter:
 
             try:
                 inverter_data = await self.hub.modbus_read_holding_registers(
-                    unit=self.inverter_unit_id, address=40123, rcount=mmppt_registers
+                    unit=self.inverter_unit_id,
+                    address=40123,
+                    rcount=mmppt_registers,
+                    group=PollGroup.MMPPT,
                 )
-                self.hub.note_group_read(PollGroup.MMPPT)
 
                 if self.decoded_mmppt["mmppt_Units"] in [2, 3]:
                     int16_fields = [
@@ -530,13 +537,7 @@ class SolarEdgeInverter:
                         inverter_data.registers[7]
                     ]
                     self.decoded_model.update(
-                        dict(
-                            zip(
-                                int16_fields,
-                                [decode_int16([r]) for r in int16_data],
-                                strict=True,
-                            )
-                        )
+                        decode_fields(int16_fields, int16_data, decode_int16, size=1)
                     )
 
                     self.decoded_model.update(
@@ -598,15 +599,8 @@ class SolarEdgeInverter:
                             ]
                         )
                         mmppt_unit_data.update(
-                            dict(
-                                zip(
-                                    uint32_fields,
-                                    [
-                                        decode_uint32(uint32_data[i : i + 2])
-                                        for i in range(0, len(uint32_data), 2)
-                                    ],
-                                    strict=True,
-                                )
+                            decode_fields(
+                                uint32_fields, uint32_data, decode_uint32, size=2
                             )
                         )
 
@@ -623,15 +617,17 @@ class SolarEdgeInverter:
         if (
             self.hub.option_detect_extras is True
             and self.global_power_control is not False
-            and (self.hub.slow_poll_due or not self._gpc_probed)
+            and (self.hub.poll_due(PollGroup.SETTINGS) or not self._gpc_probed)
         ):
             self._gpc_probed = True
             try:
                 async with asyncio.timeout(SolarEdgeTimeouts.Read / 1000):
                     inverter_data = await self.hub.modbus_read_holding_registers(
-                        unit=self.inverter_unit_id, address=61440, rcount=4
+                        unit=self.inverter_unit_id,
+                        address=61440,
+                        rcount=4,
+                        group=PollGroup.SETTINGS,
                     )
-                    self.hub.note_group_read(PollGroup.SETTINGS)
 
                     self.decoded_model.update(
                         {
@@ -694,15 +690,17 @@ class SolarEdgeInverter:
         if (
             self.hub.option_detect_extras is True
             and self.advanced_power_control is not False
-            and (self.hub.slow_poll_due or not self._apc_probed)
+            and (self.hub.poll_due(PollGroup.SETTINGS) or not self._apc_probed)
         ):
             self._apc_probed = True
             try:
                 async with asyncio.timeout(SolarEdgeTimeouts.Read / 1000):
                     inverter_data = await self.hub.modbus_read_holding_registers(
-                        unit=self.inverter_unit_id, address=61696, rcount=86
+                        unit=self.inverter_unit_id,
+                        address=61696,
+                        rcount=86,
+                        group=PollGroup.SETTINGS,
                     )
-                    self.hub.note_group_read(PollGroup.SETTINGS)
 
                     int32_fields = APC_INT32_FIELDS
                     int32_data = (
@@ -711,17 +709,12 @@ class SolarEdgeInverter:
                         + inverter_data.registers[66:70]
                     )
                     self.decoded_model.update(
-                        dict(
-                            zip(
-                                int32_fields,
-                                [
-                                    decode_int32(
-                                        int32_data[i : i + 2], word_order="little"
-                                    )
-                                    for i in range(0, len(int32_data), 2)
-                                ],
-                                strict=True,
-                            )
+                        decode_fields(
+                            int32_fields,
+                            int32_data,
+                            decode_int32,
+                            size=2,
+                            word_order="little",
                         )
                     )
 
@@ -730,17 +723,12 @@ class SolarEdgeInverter:
                         inverter_data.registers[10:66] + inverter_data.registers[70:86]
                     )
                     self.decoded_model.update(
-                        dict(
-                            zip(
-                                float32_fields,
-                                [
-                                    decode_float32(
-                                        float32_data[i : i + 2], word_order="little"
-                                    )
-                                    for i in range(0, len(float32_data), 2)
-                                ],
-                                strict=True,
-                            )
+                        decode_fields(
+                            float32_fields,
+                            float32_data,
+                            decode_float32,
+                            size=2,
+                            word_order="little",
                         )
                     )
 
@@ -770,17 +758,12 @@ class SolarEdgeInverter:
                         + inverter_data.registers[56:84]
                     )
                     self.decoded_model.update(
-                        dict(
-                            zip(
-                                float32_fields,
-                                [
-                                    decode_float32(
-                                        float32_data[i : i + 2], word_order="little"
-                                    )
-                                    for i in range(0, len(float32_data), 2)
-                                ],
-                                strict=True,
-                            )
+                        decode_fields(
+                            float32_fields,
+                            float32_data,
+                            decode_float32,
+                            size=2,
+                            word_order="little",
                         )
                     )
 
@@ -789,17 +772,12 @@ class SolarEdgeInverter:
                         inverter_data.registers[32:36] + inverter_data.registers[52:56]
                     )
                     self.decoded_model.update(
-                        dict(
-                            zip(
-                                uint32_fields,
-                                [
-                                    decode_uint32(
-                                        uint32_data[i : i + 2], word_order="little"
-                                    )
-                                    for i in range(0, len(uint32_data), 2)
-                                ],
-                                strict=True,
-                            )
+                        decode_fields(
+                            uint32_fields,
+                            uint32_data,
+                            decode_uint32,
+                            size=2,
+                            word_order="little",
                         )
                     )
 
@@ -853,14 +831,18 @@ class SolarEdgeInverter:
         if (
             self.hub.option_site_limit_control is True
             and self.site_limit_control is not False
-            and (self.hub.slow_poll_due or self.site_limit_control is None)
+            and (
+                self.hub.poll_due(PollGroup.SETTINGS) or self.site_limit_control is None
+            )
         ):
             """Site Limit and Mode"""
             try:
                 inverter_data = await self.hub.modbus_read_holding_registers(
-                    unit=self.inverter_unit_id, address=57344, rcount=4
+                    unit=self.inverter_unit_id,
+                    address=57344,
+                    rcount=4,
+                    group=PollGroup.SETTINGS,
                 )
-                self.hub.note_group_read(PollGroup.SETTINGS)
 
                 self.decoded_model.update(
                     {
@@ -888,12 +870,14 @@ class SolarEdgeInverter:
 
             """ External Production Max Power """
             try:
-                inverter_data = await self.hub.modbus_read_holding_registers(
-                    unit=self.inverter_unit_id, address=57362, rcount=2
-                )
                 # Its own try block: this can succeed on an inverter that
                 # rejected the site-limit read above.
-                self.hub.note_group_read(PollGroup.SETTINGS)
+                inverter_data = await self.hub.modbus_read_holding_registers(
+                    unit=self.inverter_unit_id,
+                    address=57362,
+                    rcount=2,
+                    group=PollGroup.SETTINGS,
+                )
 
                 self.decoded_model.update(
                     {
@@ -904,11 +888,7 @@ class SolarEdgeInverter:
                 )
 
             except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
-                try:
-                    del self.decoded_model["Ext_Prod_Max"]
-                except KeyError:
-                    pass
-
+                drop_decoded(self.decoded_model, ("Ext_Prod_Max",))
                 _LOGGER.debug(f"I{self.inverter_unit_id}: Ext_Prod_Max NOT available")
 
             except ModbusIOError:
@@ -924,9 +904,11 @@ class SolarEdgeInverter:
         ):
             try:
                 inverter_data = await self.hub.modbus_read_holding_registers(
-                    unit=self.inverter_unit_id, address=40113, rcount=2
+                    unit=self.inverter_unit_id,
+                    address=40113,
+                    rcount=2,
+                    group=PollGroup.STATUS,
                 )
-                self.hub.note_group_read(PollGroup.STATUS)
 
                 self.decoded_model.update(
                     {
@@ -956,7 +938,10 @@ class SolarEdgeInverter:
         if (
             self.hub.option_storage_control is True
             and self.decoded_storage_control is not False
-            and (self.hub.slow_poll_due or self.decoded_storage_control is None)
+            and (
+                self.hub.poll_due(PollGroup.SETTINGS)
+                or self.decoded_storage_control is None
+            )
         ):
             if self.has_battery is None:
                 self.has_battery = False
@@ -966,9 +951,11 @@ class SolarEdgeInverter:
 
             try:
                 inverter_data = await self.hub.modbus_read_holding_registers(
-                    unit=self.inverter_unit_id, address=57348, rcount=14
+                    unit=self.inverter_unit_id,
+                    address=57348,
+                    rcount=14,
+                    group=PollGroup.SETTINGS,
                 )
-                self.hub.note_group_read(PollGroup.SETTINGS)
 
                 uint16_fields = [
                     "control_mode",
@@ -999,17 +986,12 @@ class SolarEdgeInverter:
                     inverter_data.registers[2:6] + inverter_data.registers[10:14]
                 )
                 self.decoded_storage_control.update(
-                    dict(
-                        zip(
-                            float32_fields,
-                            [
-                                decode_float32(
-                                    float32_data[i : i + 2], word_order="little"
-                                )
-                                for i in range(0, len(float32_data), 2)
-                            ],
-                            strict=True,
-                        )
+                    decode_fields(
+                        float32_fields,
+                        float32_data,
+                        decode_float32,
+                        size=2,
+                        word_order="little",
                     )
                 )
 
@@ -1272,12 +1254,7 @@ class SolarEdgeMeter:
                 + [meter_data.registers[104]]
             )
             self.decoded_model.update(
-                dict(
-                    zip(
-                        int16_fields,
-                        [decode_int16([r]) for r in int16_data],
-                    )
-                )
+                decode_fields(int16_fields, int16_data, decode_int16, size=1)
             )
 
             uint32_fields = [
@@ -1322,15 +1299,7 @@ class SolarEdgeMeter:
                 + meter_data.registers[105:107]
             )
             self.decoded_model.update(
-                dict(
-                    zip(
-                        uint32_fields,
-                        [
-                            decode_uint32(uint32_data[i : i + 2])
-                            for i in range(0, len(uint32_data), 2)
-                        ],
-                    )
-                )
+                decode_fields(uint32_fields, uint32_data, decode_uint32, size=2)
             )
 
         except ModbusIOError:
@@ -1417,16 +1386,16 @@ class SolarEdgeBattery:
             # B_-prefixed names, little word order, no Option, and a
             # trailing float32 rated-energy field.
             self.decoded_common = {
-                "B_Manufacturer": decode_sunspec_string(  # string(32)
+                "B_Manufacturer": int_list_to_string(  # string(32)
                     battery_info.registers[0:16]
                 ),
-                "B_Model": decode_sunspec_string(  # string(32)
+                "B_Model": int_list_to_string(  # string(32)
                     battery_info.registers[16:32]
                 ),
-                "B_Version": decode_sunspec_string(  # string(32)
+                "B_Version": int_list_to_string(  # string(32)
                     battery_info.registers[32:48]
                 ),
-                "B_SerialNumber": decode_sunspec_string(  # string(32)
+                "B_SerialNumber": int_list_to_string(  # string(32)
                     battery_info.registers[48:64]
                 ),
                 "B_Device_Address": battery_info.registers[64],
@@ -1514,14 +1483,12 @@ class SolarEdgeBattery:
                 + battery_data.registers[40:50]
                 + battery_data.registers[58:66]
             )
-            self.decoded_model = dict(
-                zip(
-                    float32_fields,
-                    [
-                        decode_float32(float32_data[i : i + 2], word_order="little")
-                        for i in range(0, len(float32_data), 2)
-                    ],
-                )
+            self.decoded_model = decode_fields(
+                float32_fields,
+                float32_data,
+                decode_float32,
+                size=2,
+                word_order="little",
             )
 
             uint64_fields = [
@@ -1530,28 +1497,24 @@ class SolarEdgeBattery:
             ]
             uint64_data = battery_data.registers[50:58]
             self.decoded_model.update(
-                dict(
-                    zip(
-                        uint64_fields,
-                        [
-                            decode_uint64(uint64_data[i : i + 4], word_order="little")
-                            for i in range(0, len(uint64_data), 4)
-                        ],
-                    )
+                decode_fields(
+                    uint64_fields,
+                    uint64_data,
+                    decode_uint64,
+                    size=4,
+                    word_order="little",
                 )
             )
 
             uint32_fields = ["B_Status", "B_Status_Vendor"]
             uint32_data = battery_data.registers[66:70]
             self.decoded_model.update(
-                dict(
-                    zip(
-                        uint32_fields,
-                        [
-                            decode_uint32(uint32_data[i : i + 2], word_order="little")
-                            for i in range(0, len(uint32_data), 2)
-                        ],
-                    )
+                decode_fields(
+                    uint32_fields,
+                    uint32_data,
+                    decode_uint32,
+                    size=2,
+                    word_order="little",
                 )
             )
 

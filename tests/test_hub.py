@@ -95,7 +95,7 @@ async def test_hub_reconnects_existing_disconnected_client(
 
 
 async def test_hub_disconnect(mock_hub, mock_modbus_client) -> None:
-    """Test hub disconnection."""
+    """Disconnect closes the connection and retires it for replacement."""
     with patch(
         "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
@@ -104,17 +104,6 @@ async def test_hub_disconnect(mock_hub, mock_modbus_client) -> None:
         await mock_hub.disconnect()
 
     mock_modbus_client.return_value.close.assert_called_once()
-
-
-async def test_hub_disconnect_clear_client(mock_hub, mock_modbus_client) -> None:
-    """Test hub disconnection with client clearing."""
-    with patch(
-        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
-        mock_modbus_client,
-    ):
-        await mock_hub.connect()
-        await mock_hub.disconnect(clear_client=True)
-
     assert mock_hub._client is None
 
 

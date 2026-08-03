@@ -103,6 +103,11 @@ def _due(hub: SolarEdgeModbusMultiHub) -> set[PollGroup]:
     return {group for group in PollGroup if hub.poll_due(group)}
 
 
+def _multipliers(hub: SolarEdgeModbusMultiHub) -> dict[str, int]:
+    """The resolved cadence per group, as diagnostics reports it."""
+    return {name: group["multiplier"] for name, group in hub.poll_groups.items()}
+
+
 def _recording_device() -> MagicMock:
     """Device stub that keeps the timestamp the hub handed it."""
     device = MagicMock()
@@ -122,7 +127,7 @@ async def test_default_multipliers_slow_poll_settings_only(make_hub) -> None:
     """With no YAML, only the settings blocks are thinned."""
     hub = make_hub()
 
-    assert hub.poll_multipliers == {
+    assert _multipliers(hub) == {
         "core": 1,
         "meter": 1,
         "battery": 1,
@@ -137,10 +142,10 @@ async def test_slow_poll_option_moves_only_the_settings_group(make_hub) -> None:
     """Changing the options-flow multiplier leaves every other group at 1."""
     hub = make_hub(slow_poll_multiplier=9)
 
-    assert hub.poll_multipliers["settings"] == 9
+    assert _multipliers(hub)["settings"] == 9
     assert all(
         multiplier == 1
-        for group, multiplier in hub.poll_multipliers.items()
+        for group, multiplier in _multipliers(hub).items()
         if group != "settings"
     )
 
@@ -149,7 +154,7 @@ async def test_yaml_poll_overrides_named_groups(make_hub) -> None:
     """A YAML `poll:` block retimes exactly the groups it names."""
     hub = make_hub({"status": 6, "battery": 3}, slow_poll_multiplier=2)
 
-    assert hub.poll_multipliers == {
+    assert _multipliers(hub) == {
         "core": 1,
         "meter": 1,
         "battery": 3,
@@ -164,7 +169,7 @@ async def test_yaml_settings_wins_over_the_options_multiplier(make_hub) -> None:
     """Advanced YAML is the last word on the settings cadence."""
     hub = make_hub({"settings": 2}, slow_poll_multiplier=6)
 
-    assert hub.poll_multipliers["settings"] == 2
+    assert _multipliers(hub)["settings"] == 2
 
 
 async def test_core_multiplier_is_pinned_to_one(make_hub) -> None:
@@ -172,8 +177,8 @@ async def test_core_multiplier_is_pinned_to_one(make_hub) -> None:
     hub = make_hub({"core": 10, "meter": 10})
 
     assert PollGroup.CORE not in CONFIGURABLE_POLL_GROUPS
-    assert hub.poll_multipliers["core"] == 1
-    assert hub.poll_multipliers["meter"] == 10
+    assert _multipliers(hub)["core"] == 1
+    assert _multipliers(hub)["meter"] == 10
 
 
 @pytest.mark.parametrize("multiplier", [0, -1])
@@ -181,8 +186,8 @@ async def test_multipliers_below_one_clamp_to_one(make_hub, multiplier) -> None:
     """The schema rejects these, but neither source is trusted blindly."""
     hub = make_hub({"meter": multiplier}, slow_poll_multiplier=multiplier)
 
-    assert hub.poll_multipliers["meter"] == 1
-    assert hub.poll_multipliers["settings"] == 1
+    assert _multipliers(hub)["meter"] == 1
+    assert _multipliers(hub)["settings"] == 1
 
 
 @pytest.mark.parametrize(
@@ -220,7 +225,6 @@ async def test_new_hub_has_every_group_due(make_hub) -> None:
     hub = make_hub({"meter": 4}, slow_poll_multiplier=6)
 
     assert _due(hub) == set(PollGroup)
-    assert hub.due_groups == sorted(f"{group}" for group in PollGroup)
 
 
 async def test_first_refresh_cycle_is_all_due(make_hub) -> None:
@@ -439,7 +443,6 @@ async def test_slow_poll_due_aliases_the_settings_group(make_hub) -> None:
 
     hub.slow_poll_due = False
     assert hub.poll_due(PollGroup.SETTINGS) is False
-    assert "settings" not in hub.due_groups
     assert _due(hub) == set(PollGroup) - {PollGroup.SETTINGS}
 
     hub.slow_poll_due = True
@@ -476,7 +479,6 @@ async def test_diagnostics_exposes_poll_groups(hass, make_hub) -> None:
     assert {name for name, group in groups.items() if group["due"]} == {
         f"{group}" for group in BASE_GROUPS
     }
-    assert polling["slow_poll_due"] is False
 
     # This hub has no devices, so "due" is all it can honestly claim: being
     # scheduled is not evidence that anything was read.
