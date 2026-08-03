@@ -202,6 +202,8 @@ class SolarEdgeModbusMultiHub:
         # Everything is due until the first refresh decides otherwise, so
         # discovery and cycle 0 always see a complete picture.
         self._due_groups: set[PollGroup] = set(PollGroup)
+        self._group_last_cycle: dict[PollGroup, int | None] = dict.fromkeys(PollGroup)
+        self._settings_read_incomplete = False
         self._retry_limit = self._yaml_config.get("retry", {}).get(
             "limit", RetrySettings.Limit
         )
@@ -264,7 +266,7 @@ class SolarEdgeModbusMultiHub:
         )
 
         _LOGGER.debug(f"pymodbus version {self.pymodbus_version}")
-        _LOGGER.debug(f"poll multipliers: {self.poll_multipliers}")
+        _LOGGER.debug(f"poll multipliers: {dict(self._poll_multipliers)}")
 
     def _build_poll_multipliers(self, entry_options) -> dict[PollGroup, int]:
         """Resolve each group's cadence from options then advanced YAML.
@@ -295,6 +297,15 @@ class SolarEdgeModbusMultiHub:
     def poll_due(self, group: PollGroup) -> bool:
         """Whether this refresh reads the blocks belonging to `group`."""
         return group in self._due_groups
+
+    def note_settings_read_incomplete(self) -> None:
+        """Record that a settings block did not answer this refresh.
+
+        Detect-probe timeouts are handled inside the device read, so the
+        refresh still completes. The settings data is stale, though, so this
+        poll must not count as having served a write-forced re-read.
+        """
+        self._settings_read_incomplete = True
 
     async def _async_init_solaredge(self) -> None:
         """Detect devices and load initial modbus data from inverters."""
@@ -561,6 +572,7 @@ class SolarEdgeModbusMultiHub:
         }
         if served_slow_poll_requests > 0:
             self._due_groups.add(PollGroup.SETTINGS)
+        self._settings_read_incomplete = False
 
         try:
             async with asyncio.timeout(self.coordinator_timeout):
@@ -611,15 +623,26 @@ class SolarEdgeModbusMultiHub:
             raise DataUpdateFailed(f"Timeout error: {e}")
 
         self._poll_cycle = next_cycle
+
+        settings_served = self.slow_poll_due and not self._settings_read_incomplete
+        for group in self._due_groups:
+            if group is PollGroup.SETTINGS and not settings_served:
+                continue
+            self._group_last_cycle[group] = next_cycle
+
         # Consume only the requests this poll actually served; requests from
         # writes that landed during the refresh stay pending for the next one.
-        self._slow_poll_requests -= served_slow_poll_requests
+        # A settings block whose detect probe timed out is handled inside the
+        # device read, so the refresh still "succeeds" — but it did not verify
+        # the write, so the forced request must survive to the next cycle.
+        if settings_served:
+            self._slow_poll_requests -= served_slow_poll_requests
 
         # SolarEdge requires an explicit commit for static power-control
         # settings to survive an inverter restart. Warn once per batch,
         # after a slow poll has re-read the control blocks post-write.
         if (
-            self.slow_poll_due
+            settings_served
             and self._uncommitted_power_settings
             and not self._uncommitted_warned
         ):
@@ -890,16 +913,30 @@ class SolarEdgeModbusMultiHub:
 
     @property
     def poll_multipliers(self) -> dict[str, int]:
-        """Resolved cadence per group, for diagnostics."""
-        return {
-            f"{group}": multiplier
-            for group, multiplier in self._poll_multipliers.items()
-        }
+        """Resolved cadence per group."""
+        return {f"{group}": self._poll_multipliers[group] for group in PollGroup}
 
     @property
     def due_groups(self) -> list[str]:
-        """Groups this refresh is reading, for diagnostics."""
+        """Groups this refresh is reading."""
         return sorted(f"{group}" for group in self._due_groups)
+
+    @property
+    def poll_groups(self) -> dict[str, dict[str, int | bool | None]]:
+        """Per-group cadence, current due state, and last cycle actually served.
+
+        `last_served_cycle` is what proves the configured cadence is really
+        happening — `multiplier` and `due` only describe intent. A settings
+        poll whose detect probe timed out does not advance it.
+        """
+        return {
+            f"{group}": {
+                "multiplier": self._poll_multipliers[group],
+                "due": group in self._due_groups,
+                "last_served_cycle": self._group_last_cycle[group],
+            }
+            for group in PollGroup
+        }
 
     @property
     def slow_poll_due(self) -> bool:

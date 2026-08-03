@@ -715,6 +715,10 @@ class SolarEdgeInverter:
                 )
 
             except (TimeoutError, ModbusIOException):
+                # Handled here, so the refresh still completes — but the
+                # settings data is stale, so the poll must not count as a
+                # served re-read.
+                self.hub.note_settings_read_incomplete()
                 ir.async_create_issue(
                     self.hub._hass,
                     DOMAIN,
@@ -880,6 +884,10 @@ class SolarEdgeInverter:
                 )
 
             except (TimeoutError, ModbusIOException):
+                # Handled here, so the refresh still completes — but the
+                # settings data is stale, so the poll must not count as a
+                # served re-read.
+                self.hub.note_settings_read_incomplete()
                 ir.async_create_issue(
                     self.hub._hass,
                     DOMAIN,

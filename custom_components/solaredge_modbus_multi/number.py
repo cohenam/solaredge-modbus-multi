@@ -39,14 +39,14 @@ async def async_setup_entry(
 
     for inverter in hub.inverters:
         """Dynamic Power Control"""
-        if hub.option_detect_extras and inverter.global_power_control:
+        if hub.option_detect_extras and inverter.global_power_control is not False:
             entities.append(
                 SolarEdgeActivePowerLimitSet(inverter, config_entry, coordinator)
             )
             entities.append(SolarEdgeCosPhiSet(inverter, config_entry, coordinator))
 
         """ Power Control Block """
-        if hub.option_detect_extras and inverter.advanced_power_control:
+        if hub.option_detect_extras and inverter.advanced_power_control is not False:
             entities.append(SolarEdgePowerReduce(inverter, config_entry, coordinator))
             entities.append(SolarEdgeCurrentLimit(inverter, config_entry, coordinator))
 

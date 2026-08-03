@@ -61,7 +61,7 @@
         "title": "Opciones de batería",
         "data": {
           "allow_battery_energy_reset": "Permitir reinicio de energía de la batería",
-          "battery_energy_reset_cycles": "Ciclos de actualización para reiniciar energía de la batería",
+          "battery_energy_reset_cycles": "Lecturas consecutivas más bajas de la batería antes de aceptar un reinicio de energía",
           "battery_rating_adjust": "Ajuste de capacidad de la batería (porcentaje)"
         }
       }

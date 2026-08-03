@@ -821,10 +821,13 @@ async def test_diagnostics_polling_section(
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
 
     polling = diagnostics["polling"]
-    assert polling["poll_multipliers"] == hub.poll_multipliers
-    assert polling["poll_multipliers"]["core"] == 1
-    assert sorted(polling["poll_multipliers"]) == sorted(str(g) for g in PollGroup)
-    assert polling["due_groups"] == hub.due_groups
+    assert polling["poll_groups"] == hub.poll_groups
+    assert sorted(polling["poll_groups"]) == sorted(str(g) for g in PollGroup)
+    assert polling["poll_groups"]["core"]["multiplier"] == 1
+    # Nothing has been served yet, so the cadence evidence is empty.
+    assert all(
+        group["last_served_cycle"] is None for group in polling["poll_groups"].values()
+    )
     assert polling["uncommitted_power_settings"] == []
     assert polling["transport"]["connects"] == 1
     assert polling["transport"]["reads"] == 0

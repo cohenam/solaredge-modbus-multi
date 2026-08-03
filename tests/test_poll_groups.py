@@ -35,6 +35,10 @@ from custom_components.solaredge_modbus_multi.hub import (
 )
 from custom_components.solaredge_modbus_multi.sensor import (
     SolarEdgeCommitControlSettings,
+    SolarEdgeRRCR,
+)
+from custom_components.solaredge_modbus_multi.sensor import (
+    async_setup_entry as sensor_setup_entry,
 )
 from tests.conftest import create_exception_response, create_modbus_response
 from tests.test_decode_golden import build_synergy_full_space, make_side_effect
@@ -457,14 +461,25 @@ async def test_diagnostics_exposes_poll_groups(hass, make_hub) -> None:
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
 
     polling = diagnostics["polling"]
+    groups = polling["poll_groups"]
     assert polling["poll_cycle"] == 1
-    assert polling["poll_multipliers"] == hub.poll_multipliers
-    assert polling["poll_multipliers"]["meter"] == 2
-    assert polling["poll_multipliers"]["battery"] == 3
-    assert polling["poll_multipliers"]["settings"] == 4
-    assert polling["due_groups"] == hub.due_groups
-    assert polling["due_groups"] == sorted(f"{group}" for group in BASE_GROUPS)
+    assert groups == hub.poll_groups
+    assert groups["meter"]["multiplier"] == 2
+    assert groups["battery"]["multiplier"] == 3
+    assert groups["settings"]["multiplier"] == 4
+
+    assert {name for name, group in groups.items() if group["due"]} == {
+        f"{group}" for group in BASE_GROUPS
+    }
     assert polling["slow_poll_due"] is False
+
+    # Cadence evidence: cycle 0 served everything, cycle 1 only the base
+    # groups, so the tiered ones are still pinned to the cycle they last ran.
+    assert groups["core"]["last_served_cycle"] == 1
+    assert groups["meter"]["last_served_cycle"] == 0
+    assert groups["battery"]["last_served_cycle"] == 0
+    assert groups["settings"]["last_served_cycle"] == 0
+
     assert diagnostics["yaml"]["poll"] == {"meter": 2, "battery": 3}
 
 
@@ -562,3 +577,169 @@ async def test_detect_illegal_response_disables_block_permanently(
 
         assert address not in _addresses(calls)
         assert getattr(inverter, capability) is False
+
+
+# --- review findings: capability recovery and forced-poll accounting ---------
+
+
+@pytest.mark.parametrize(
+    ("address", "capability", "entity_class"),
+    [
+        (61440, "global_power_control", SolarEdgeRRCR),
+        (61696, "advanced_power_control", SolarEdgeCommitControlSettings),
+    ],
+    ids=["gpc", "apc"],
+)
+async def test_startup_probe_timeout_still_creates_entities(
+    hass, make_hub, mock_modbus_client, address, capability, entity_class
+) -> None:
+    """A probe that times out during setup must not omit entities forever.
+
+    Home Assistant runs platform setup once. If a transient timeout left the
+    capability undecided and the platform skipped the entities, a later
+    successful probe could never bring them back without an integration
+    reload — so the entities are created and simply stay unavailable until
+    detection succeeds.
+    """
+    hub = make_hub(slow_poll_multiplier=3)
+    space = build_synergy_full_space()
+    calls: list[tuple[int, int]] = []
+    base_side_effect = make_side_effect(space, {}, calls)
+    timing_out = True
+
+    def side_effect(*args, **kwargs):
+        probe_address = kwargs.get("address", args[0] if args else 0)
+        if timing_out and probe_address == address:
+            raise TimeoutError
+        return base_side_effect(*args, **kwargs)
+
+    mock_client = mock_modbus_client.return_value
+    mock_client.read_holding_registers.side_effect = side_effect
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await hub.connect()
+        inverter = SolarEdgeInverter(device_id=1, hub=hub)
+        await inverter.init_device()
+        await inverter.read_modbus_data()
+
+        assert getattr(inverter, capability) is None
+
+        # Platform setup happens exactly once, right here.
+        hub.inverters = [inverter]
+        entry = MagicMock()
+        entry.entry_id = "poll_groups"
+        entry.data = {"name": "Test SolarEdge"}
+        entry.runtime_data = SimpleNamespace(hub=hub, coordinator=MagicMock())
+        async_add_entities = MagicMock()
+        await sensor_setup_entry(hass, entry, async_add_entities)
+
+        created = async_add_entities.call_args[0][0]
+        blocked = [entity for entity in created if isinstance(entity, entity_class)]
+        assert blocked, "capability entities must exist while detection is undecided"
+        assert all(not entity.available for entity in blocked)
+
+        # Detection succeeds later; the same entity objects come good.
+        timing_out = False
+        hub.slow_poll_due = True
+        await inverter.read_modbus_data()
+
+        assert getattr(inverter, capability) is True
+        assert all(entity.available for entity in blocked)
+
+
+@pytest.mark.parametrize(("address", "capability", "probed_flag"), DETECT_PROBES)
+async def test_settings_timeout_does_not_consume_forced_poll(
+    make_hub, mock_modbus_client, address, capability, probed_flag
+) -> None:
+    """A write-forced settings re-read is only spent once it actually happens.
+
+    Detect-probe timeouts are swallowed inside the device read, so the refresh
+    still succeeds. That must not be mistaken for having verified the write.
+    """
+    hub = make_hub(slow_poll_multiplier=6)
+    space = build_synergy_full_space()
+    calls: list[tuple[int, int]] = []
+    base_side_effect = make_side_effect(space, {}, calls)
+    timing_out = True
+
+    def side_effect(*args, **kwargs):
+        probe_address = kwargs.get("address", args[0] if args else 0)
+        if timing_out and probe_address == address:
+            raise TimeoutError
+        return base_side_effect(*args, **kwargs)
+
+    mock_client = mock_modbus_client.return_value
+    mock_client.read_holding_registers.side_effect = side_effect
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await hub.connect()
+        inverter = SolarEdgeInverter(device_id=1, hub=hub)
+        await inverter.init_device()
+        hub.inverters = [inverter]
+        hub.initalized = True
+
+        # Cycle 0 is settings-due but the probe times out, so nothing is served.
+        await hub.async_refresh_modbus_data()
+        assert hub.poll_groups["settings"]["last_served_cycle"] is None
+
+        # Stand in for a write: request a settings re-read off-cycle.
+        hub._slow_poll_requests = 1
+
+        await hub.async_refresh_modbus_data()  # cycle 1, forced settings poll
+        assert hub.slow_poll_due is True
+        assert hub._slow_poll_requests == 1, "timed-out poll must not spend it"
+        assert hub.poll_groups["settings"]["last_served_cycle"] is None
+
+        timing_out = False
+        await hub.async_refresh_modbus_data()  # cycle 2, still forced
+        assert hub.slow_poll_due is True
+        assert hub._slow_poll_requests == 0, "a served poll spends the request"
+        assert hub.poll_groups["settings"]["last_served_cycle"] == 2
+
+
+async def test_settings_timeout_defers_uncommitted_warning(
+    make_hub, mock_modbus_client, caplog
+) -> None:
+    """The uncommitted-settings warning waits for real settings data."""
+    hub = make_hub(slow_poll_multiplier=6)
+    space = build_synergy_full_space()
+    calls: list[tuple[int, int]] = []
+    base_side_effect = make_side_effect(space, {}, calls)
+    timing_out = True
+
+    def side_effect(*args, **kwargs):
+        probe_address = kwargs.get("address", args[0] if args else 0)
+        if timing_out and probe_address == 61696:
+            raise TimeoutError
+        return base_side_effect(*args, **kwargs)
+
+    mock_client = mock_modbus_client.return_value
+    mock_client.read_holding_registers.side_effect = side_effect
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await hub.connect()
+        inverter = SolarEdgeInverter(device_id=1, hub=hub)
+        await inverter.init_device()
+        hub.inverters = [inverter]
+        hub.initalized = True
+        await hub.async_refresh_modbus_data()
+
+        hub._uncommitted_power_settings = {61760}
+        hub._slow_poll_requests = 1
+
+        caplog.clear()
+        await hub.async_refresh_modbus_data()
+        assert "written without" not in caplog.text
+
+        timing_out = False
+        await hub.async_refresh_modbus_data()
+        assert "written without" in caplog.text
