@@ -664,7 +664,7 @@ class TestIssueScoping:
             SolarEdgeModbusMultiHub,
             detect_timeout_issue_id,
         )
-        from tests.test_decode_golden import build_synergy_full_space, make_side_effect
+        from tests.conftest import build_synergy_full_space, make_side_effect
 
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN]["yaml"] = {}

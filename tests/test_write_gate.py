@@ -7,7 +7,7 @@ the hub refuses a write outright, before it can reach the transport.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -63,7 +63,7 @@ def build_hub(hass, entry_data, entry_options, *, allow_writes):
 
 
 @pytest.fixture
-def platform_entry(mock_coordinator_stub):
+def platform_entry(mock_coordinator):
     """A config entry whose runtime_data carries a mock hub and coordinator."""
 
     def _build(*, allow_writes: bool, detect_extras: bool = True):
@@ -84,28 +84,10 @@ def platform_entry(mock_coordinator_stub):
         entry = MagicMock()
         entry.entry_id = "test_entry_123"
         entry.data = {"name": "Test SolarEdge"}
-        entry.runtime_data = SimpleNamespace(hub=hub, coordinator=mock_coordinator_stub)
+        entry.runtime_data = SimpleNamespace(hub=hub, coordinator=mock_coordinator)
         return entry
 
     return _build
-
-
-@pytest.fixture
-def mock_config_entry_stub():
-    """Minimal config entry double for entity construction."""
-    entry = MagicMock()
-    entry.entry_id = "test_entry_123"
-    entry.data = {"name": "Test SolarEdge"}
-    return entry
-
-
-@pytest.fixture
-def mock_coordinator_stub():
-    """Minimal coordinator double for entity construction."""
-    coordinator = MagicMock()
-    coordinator.async_add_listener = MagicMock()
-    coordinator.data = {}
-    return coordinator
 
 
 # --- the option itself --------------------------------------------------------
@@ -159,14 +141,10 @@ async def test_write_refused_never_reaches_transport(
     )
     mock_client = mock_modbus_client.return_value
 
-    with patch(
-        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
-        mock_modbus_client,
-    ):
-        await hub.connect()
+    await hub.connect()
 
-        with pytest.raises(HomeAssistantError, match="Hardware writes are disabled"):
-            await hub.write_registers(unit=1, address=61696, payload=[1])
+    with pytest.raises(HomeAssistantError, match="Hardware writes are disabled"):
+        await hub.write_registers(unit=1, address=61696, payload=[1])
 
     mock_client.write_registers.assert_not_called()
 
@@ -182,14 +160,10 @@ async def test_refused_write_does_not_disturb_poll_state(
         hass, mock_config_entry_data, mock_config_entry_options, allow_writes=False
     )
 
-    with patch(
-        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
-        mock_modbus_client,
-    ):
-        await hub.connect()
+    await hub.connect()
 
-        with pytest.raises(HomeAssistantError):
-            await hub.write_registers(unit=1, address=61700, payload=[0, 1])
+    with pytest.raises(HomeAssistantError):
+        await hub.write_registers(unit=1, address=61700, payload=[0, 1])
 
     assert hub.has_write is None
     assert hub._slow_poll_requests == 0
@@ -208,12 +182,8 @@ async def test_write_allowed_when_enabled(
     )
     mock_client = mock_modbus_client.return_value
 
-    with patch(
-        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
-        mock_modbus_client,
-    ):
-        await hub.connect()
-        await hub.write_registers(unit=1, address=61441, payload=[100])
+    await hub.connect()
+    await hub.write_registers(unit=1, address=61441, payload=[100])
 
     mock_client.write_registers.assert_called_once()
 
@@ -290,7 +260,7 @@ async def test_button_adds_control_buttons_when_enabled(
 
 
 @pytest.fixture
-def apc_button_platform(mock_coordinator_stub):
+def apc_button_platform(mock_coordinator):
     """A device stub whose APC capability can be moved between states."""
 
     def _build(capability):
@@ -317,35 +287,31 @@ def apc_button_platform(mock_coordinator_stub):
 )
 def test_apc_button_availability_follows_capability(
     apc_button_platform,
-    mock_config_entry_stub,
-    mock_coordinator_stub,
+    mock_config_entry,
+    mock_coordinator,
     button_class,
     capability,
     expected,
 ) -> None:
     """These buttons exist before detection resolves, so they must self-gate."""
     button = button_class(
-        apc_button_platform(capability), mock_config_entry_stub, mock_coordinator_stub
+        apc_button_platform(capability), mock_config_entry, mock_coordinator
     )
 
     assert button.available is expected
 
 
 @pytest.mark.parametrize(
-    ("button_class", "address"),
-    [
-        (SolarEdgeCommitControlSettings, 61696),
-        (SolarEdgeDefaultControlSettings, 61697),
-    ],
+    "button_class",
+    [SolarEdgeCommitControlSettings, SolarEdgeDefaultControlSettings],
     ids=["commit", "default"],
 )
 @pytest.mark.parametrize("capability", [None, False], ids=["undecided", "unsupported"])
 async def test_apc_button_refuses_write_without_capability(
     apc_button_platform,
-    mock_config_entry_stub,
-    mock_coordinator_stub,
+    mock_config_entry,
+    mock_coordinator,
     button_class,
-    address,
     capability,
 ) -> None:
     """Availability is advisory; a service call can still press the button.
@@ -354,7 +320,7 @@ async def test_apc_button_refuses_write_without_capability(
     refuse rather than rely on the entity being hidden.
     """
     platform = apc_button_platform(capability)
-    button = button_class(platform, mock_config_entry_stub, mock_coordinator_stub)
+    button = button_class(platform, mock_config_entry, mock_coordinator)
 
     with pytest.raises(HomeAssistantError, match="not confirmed"):
         await button.async_press()
@@ -372,14 +338,14 @@ async def test_apc_button_refuses_write_without_capability(
 )
 async def test_apc_button_writes_once_capability_confirmed(
     apc_button_platform,
-    mock_config_entry_stub,
-    mock_coordinator_stub,
+    mock_config_entry,
+    mock_coordinator,
     button_class,
     address,
 ) -> None:
     """Regression guard: the capability check is the only thing blocking."""
     platform = apc_button_platform(True)
-    button = button_class(platform, mock_config_entry_stub, mock_coordinator_stub)
+    button = button_class(platform, mock_config_entry, mock_coordinator)
     button.async_update = AsyncMock()
 
     await button.async_press()
@@ -406,7 +372,7 @@ async def test_apc_button_writes_once_capability_confirmed(
     ids=["undecided", "supported", "unsupported"],
 )
 def test_gpc_registry_default_treats_undecided_as_enabled(
-    mock_config_entry_stub, mock_coordinator_stub, entity_class, capability, expected
+    mock_config_entry, mock_coordinator, entity_class, capability, expected
 ) -> None:
     """Home Assistant reads this once, when the entity is first registered.
 
@@ -417,19 +383,19 @@ def test_gpc_registry_default_treats_undecided_as_enabled(
     platform = MagicMock()
     platform.global_power_control = capability
     platform.uid_base = "SE10K_123456789"
-    entity = entity_class(platform, mock_config_entry_stub, mock_coordinator_stub)
+    entity = entity_class(platform, mock_config_entry, mock_coordinator)
 
     assert entity.entity_registry_enabled_default is expected
 
 
 def test_cosphi_set_stays_disabled_by_default(
-    mock_config_entry_stub, mock_coordinator_stub
+    mock_config_entry, mock_coordinator
 ) -> None:
     """CosPhi Set is deliberately opt-in and must not follow the capability."""
     platform = MagicMock()
     platform.global_power_control = True
     platform.uid_base = "SE10K_123456789"
 
-    entity = SolarEdgeCosPhiSet(platform, mock_config_entry_stub, mock_coordinator_stub)
+    entity = SolarEdgeCosPhiSet(platform, mock_config_entry, mock_coordinator)
 
     assert entity.entity_registry_enabled_default is False

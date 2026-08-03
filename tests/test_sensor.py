@@ -64,24 +64,6 @@ from custom_components.solaredge_modbus_multi.sensor import (
 
 
 @pytest.fixture
-def mock_coordinator():
-    """Create a mock coordinator."""
-    coordinator = MagicMock()
-    coordinator.async_add_listener = MagicMock()
-    coordinator.data = {}
-    return coordinator
-
-
-@pytest.fixture
-def mock_config_entry():
-    """Create a mock config entry."""
-    entry = MagicMock()
-    entry.entry_id = "test_entry_123"
-    entry.data = {"name": "Test SolarEdge"}
-    return entry
-
-
-@pytest.fixture
 def mock_inverter_platform():
     """Create a mock inverter platform with typical decoded data."""
     platform = MagicMock()
@@ -2371,45 +2353,31 @@ class TestBatteryEnergySampleGeneration:
     has to count samples instead of property evaluations.
     """
 
-    @pytest.mark.parametrize(
+    pytestmark = pytest.mark.parametrize(
         "sensor_class,model_key,start_value",
         BATTERY_ENERGY_SENSORS,
         ids=["export", "import"],
     )
-    def test_repeated_access_in_one_generation_does_not_advance_count(
-        self,
-        sensor_class,
-        model_key,
-        start_value,
-        mock_battery_platform,
-        mock_config_entry,
-        mock_coordinator,
-    ):
-        """Repeated reads of one sample count as a single cycle."""
-        mock_battery_platform.allow_battery_energy_reset = True
-        mock_battery_platform.battery_energy_reset_cycles = 3
 
-        sensor = sensor_class(
-            mock_battery_platform, mock_config_entry, mock_coordinator
-        )
+    @staticmethod
+    def _make_sensor(
+        sensor_class,
+        start_value,
+        platform,
+        config_entry,
+        coordinator,
+        *,
+        reset_cycles,
+    ):
+        """Build a reset-enabled sensor and consume its first (good) sample."""
+        platform.allow_battery_energy_reset = True
+        platform.battery_energy_reset_cycles = reset_cycles
+
+        sensor = sensor_class(platform, config_entry, coordinator)
 
         assert sensor.native_value == start_value
+        return sensor
 
-        mock_battery_platform.decoded_model[model_key] = start_value - 10000
-        mock_battery_platform.sample_generation += 1
-
-        assert sensor.native_value is None
-        assert sensor._count == 1
-
-        for _ in range(5):
-            assert sensor.native_value is None
-            assert sensor._count == 1
-
-    @pytest.mark.parametrize(
-        "sensor_class,model_key,start_value",
-        BATTERY_ENERGY_SENSORS,
-        ids=["export", "import"],
-    )
     def test_backwards_value_without_new_sample_does_not_reset(
         self,
         sensor_class,
@@ -2419,15 +2387,20 @@ class TestBatteryEnergySampleGeneration:
         mock_config_entry,
         mock_coordinator,
     ):
-        """Coordinator updates that don't re-poll the battery can't reset it."""
-        mock_battery_platform.allow_battery_energy_reset = True
-        mock_battery_platform.battery_energy_reset_cycles = 1
+        """Coordinator updates that don't re-poll the battery can't reset it.
 
-        sensor = sensor_class(
-            mock_battery_platform, mock_config_entry, mock_coordinator
+        Repeated reads of one sample count as a single cycle: with the
+        threshold at 1, a count that advanced per access would trip the
+        reset on the second read.
+        """
+        sensor = self._make_sensor(
+            sensor_class,
+            start_value,
+            mock_battery_platform,
+            mock_config_entry,
+            mock_coordinator,
+            reset_cycles=1,
         )
-
-        assert sensor.native_value == start_value
 
         mock_battery_platform.decoded_model[model_key] = start_value - 10000
         mock_battery_platform.sample_generation += 1
@@ -2438,11 +2411,6 @@ class TestBatteryEnergySampleGeneration:
         assert sensor._count == 1
         assert sensor._last == start_value
 
-    @pytest.mark.parametrize(
-        "sensor_class,model_key,start_value",
-        BATTERY_ENERGY_SENSORS,
-        ids=["export", "import"],
-    )
     def test_reset_triggers_after_configured_new_generations(
         self,
         sensor_class,
@@ -2453,14 +2421,14 @@ class TestBatteryEnergySampleGeneration:
         mock_coordinator,
     ):
         """The reset still fires once enough distinct samples go backwards."""
-        mock_battery_platform.allow_battery_energy_reset = True
-        mock_battery_platform.battery_energy_reset_cycles = 2
-
-        sensor = sensor_class(
-            mock_battery_platform, mock_config_entry, mock_coordinator
+        sensor = self._make_sensor(
+            sensor_class,
+            start_value,
+            mock_battery_platform,
+            mock_config_entry,
+            mock_coordinator,
+            reset_cycles=2,
         )
-
-        assert sensor.native_value == start_value
 
         mock_battery_platform.decoded_model[model_key] = 100
 
@@ -2479,11 +2447,6 @@ class TestBatteryEnergySampleGeneration:
         mock_battery_platform.sample_generation += 1
         assert sensor.native_value == 100
 
-    @pytest.mark.parametrize(
-        "sensor_class,model_key,start_value",
-        BATTERY_ENERGY_SENSORS,
-        ids=["export", "import"],
-    )
     def test_forward_progress_returns_value_and_clears_count(
         self,
         sensor_class,
@@ -2494,14 +2457,14 @@ class TestBatteryEnergySampleGeneration:
         mock_coordinator,
     ):
         """A rising sample after a backwards one returns the value."""
-        mock_battery_platform.allow_battery_energy_reset = True
-        mock_battery_platform.battery_energy_reset_cycles = 3
-
-        sensor = sensor_class(
-            mock_battery_platform, mock_config_entry, mock_coordinator
+        sensor = self._make_sensor(
+            sensor_class,
+            start_value,
+            mock_battery_platform,
+            mock_config_entry,
+            mock_coordinator,
+            reset_cycles=3,
         )
-
-        assert sensor.native_value == start_value
 
         mock_battery_platform.decoded_model[model_key] = start_value - 10000
         mock_battery_platform.sample_generation += 1
