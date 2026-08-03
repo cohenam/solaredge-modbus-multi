@@ -790,6 +790,11 @@ class SolarEdgeModbusMultiHub:
             # Outcome unknown: the frame may have been applied before the
             # response was lost. The transport has already retired the
             # connection; never re-send a power-control write on its own.
+            # Do request the re-read though — it is what turns "may or may
+            # not have been applied" into an answer one poll later, instead
+            # of leaving stale entity state until the settings cadence comes
+            # round, which can be minutes.
+            self._note_write_pending_verification(address)
             _LOGGER.error(f"Write to inverter ID {unit} had no response: {e}")
             raise HomeAssistantError(
                 f"No response from inverter ID {unit}; the write at address "
@@ -802,23 +807,7 @@ class SolarEdgeModbusMultiHub:
             )
 
         self.has_write = address
-        # Control registers changed: request a slow-block re-read. A counter
-        # (not a flag) so an in-flight refresh can't consume this request.
-        # Kept outside the try: it must run exactly once per write.
-        self._slow_poll_requests += 1
-
-        # Track APC static settings pending an explicit commit (61696) or
-        # restore-defaults (61697); blocks span 61696-61781 and 61782-61865.
-        if address in (61696, 61697):
-            if self._uncommitted_power_settings:
-                _LOGGER.debug(
-                    "Power control settings %s committed/restored.",
-                    sorted(self._uncommitted_power_settings),
-                )
-            self._uncommitted_power_settings.clear()
-            self._uncommitted_warned = False
-        elif 61698 <= address <= 61865:
-            self._uncommitted_power_settings.add(address)
+        self._note_write_pending_verification(address)
 
         try:
             if self.sleep_after_write > 0:
@@ -832,6 +821,33 @@ class SolarEdgeModbusMultiHub:
             self.has_write = None
 
         _LOGGER.debug(f"Finished with write {address}.")
+
+    def _note_write_pending_verification(self, address: int) -> None:
+        """Book a write for re-reading, whether or not it was confirmed.
+
+        Called for a confirmed write and for one whose response was lost,
+        because both leave the settings blocks possibly changed and the
+        entities possibly stale.
+        """
+        # A counter, not a flag, so an in-flight refresh cannot consume this
+        # request; it must be recorded exactly once per write.
+        self._slow_poll_requests += 1
+
+        # Track APC static settings pending an explicit commit (61696) or
+        # restore-defaults (61697); blocks span 61696-61781 and 61782-61865.
+        # An unconfirmed write is tracked too: warning about a setting that
+        # never landed only prompts a harmless commit, while staying silent
+        # about one that did land loses it at the next inverter restart.
+        if address in (61696, 61697):
+            if self._uncommitted_power_settings:
+                _LOGGER.debug(
+                    "Power control settings %s committed/restored.",
+                    sorted(self._uncommitted_power_settings),
+                )
+            self._uncommitted_power_settings.clear()
+            self._uncommitted_warned = False
+        elif 61698 <= address <= 61865:
+            self._uncommitted_power_settings.add(address)
 
     @staticmethod
     def _safe_version_tuple(version_str: str) -> tuple[int, ...]:

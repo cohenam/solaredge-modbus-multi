@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError
-from modbus_connection.exceptions import ModbusConnectionError, ModbusError
+from modbus_connection.exceptions import (
+    ModbusConnectionError,
+    ModbusError,
+    ModbusTimeoutError,
+)
 
 from custom_components.solaredge_modbus_multi.const import DOMAIN, ModbusExceptions
 from custom_components.solaredge_modbus_multi.hub import (
@@ -1424,3 +1428,31 @@ async def test_battery_properties(mock_hub) -> None:
     assert battery.allow_battery_energy_reset == mock_hub.allow_battery_energy_reset
     assert battery.battery_rating_adjust == mock_hub.battery_rating_adjust
     assert battery.battery_energy_reset_cycles == mock_hub.battery_energy_reset_cycles
+
+
+async def test_unconfirmed_write_still_schedules_verification(
+    mock_hub, mock_modbus_client
+) -> None:
+    """A write whose response was lost must still be re-read.
+
+    Not re-sending is right — the frame may already have been applied to a
+    power-control register. But not re-reading would leave the entity showing
+    a stale value until the natural settings cadence, which can be minutes.
+    """
+    mock_client = mock_modbus_client.return_value
+    mock_client.write_registers.side_effect = ModbusTimeoutError("no answer")
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
+        mock_modbus_client,
+    ):
+        await mock_hub.connect()
+
+        with pytest.raises(HomeAssistantError, match="may or may not have been"):
+            await mock_hub.write_registers(unit=1, address=61760, payload=[0, 1])
+
+    assert mock_hub._slow_poll_requests == 1, "the re-read must be requested"
+    # Tracked despite being unconfirmed: prompting a harmless commit beats
+    # silently losing a setting that did land at the next inverter restart.
+    assert mock_hub.uncommitted_power_settings == [61760]
+    assert mock_client.write_registers.await_count == 1, "never re-sent"

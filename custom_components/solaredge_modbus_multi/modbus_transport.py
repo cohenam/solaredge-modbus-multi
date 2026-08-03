@@ -195,8 +195,6 @@ class ModbusTransport:
     def _current(self) -> ModbusConnection:
         if self._connection is None:
             self._connection = self._build_connection()
-        elif not self._connection.connected:
-            self.stats.reconnects += 1
 
         return self._connection
 
@@ -235,9 +233,16 @@ class ModbusTransport:
             await self._connect_unlocked()
 
     async def _connect_unlocked(self) -> None:
+        # Counted on the attempt, not on every access while down, so one
+        # outage is one reconnect in diagnostics rather than however many
+        # calls happened to span it.
+        reconnecting = self._connection is not None
         connection = self._current()
         if connection.connected:
             return
+
+        if reconnecting:
+            self.stats.reconnects += 1
 
         _LOGGER.debug(f"Connecting to {self._host}:{self._port} ...")
         try:
@@ -348,10 +353,6 @@ class ModbusTransport:
                     f"No confirmed response to write at {address} on unit "
                     f"{unit}; the write may or may not have been applied: {e}"
                 )
-
-    def set_unit_spacing(self, unit: int, seconds: float) -> None:
-        """Set (or clear, with 0) a minimum gap between one unit's requests."""
-        self._current().for_unit(unit).set_message_spacing(seconds)
 
     def hold_session(self) -> _SessionHold:
         """Reserve the session for a batch of calls by the current task.
