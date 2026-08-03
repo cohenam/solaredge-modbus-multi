@@ -134,7 +134,6 @@ class PollGroup(StrEnum):
     SETTINGS = "settings"  # power control, site limit, storage
 
 
-# CORE is deliberately not configurable: thinning it would defeat the point.
 CONFIGURABLE_POLL_GROUPS: Final = frozenset(PollGroup) - {PollGroup.CORE}
 
 POLL_MULTIPLIER_MIN: Final = 1

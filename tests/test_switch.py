@@ -82,6 +82,7 @@ class TestAsyncSetupEntry:
         inverter = MagicMock()
         inverter.decoded_model = {"E_Lim_Ctl_Mode": 0x0000}
         inverter.advanced_power_control = False
+        inverter.apc_may_be_supported = False
         mock_hub.inverters = [inverter]
 
         mock_config_entry.runtime_data = SimpleNamespace(
@@ -106,6 +107,7 @@ class TestAsyncSetupEntry:
         inverter = MagicMock()
         inverter.decoded_model = {"E_Lim_Ctl_Mode": 0x0000, "AdvPwrCtrlEn": 0x0}
         inverter.advanced_power_control = True
+        inverter.apc_may_be_supported = True
         mock_hub.inverters = [inverter]
 
         mock_config_entry.runtime_data = SimpleNamespace(
@@ -131,6 +133,7 @@ class TestAsyncSetupEntry:
         inverter = MagicMock()
         inverter.decoded_model = {"AdvPwrCtrlEn": 0x0}
         inverter.advanced_power_control = True
+        inverter.apc_may_be_supported = True
         mock_hub.option_site_limit_control = False
         mock_hub.inverters = [inverter]
 
@@ -154,6 +157,7 @@ class TestAsyncSetupEntry:
         """Test setup with no entities to add."""
         inverter = MagicMock()
         inverter.advanced_power_control = False
+        inverter.apc_may_be_supported = False
         mock_hub.option_site_limit_control = False
         mock_hub.option_detect_extras = False
         mock_hub.inverters = [inverter]

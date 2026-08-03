@@ -87,7 +87,7 @@ CONFIG_SCHEMA = vol.Schema(
                             vol.Coerce(int),
                             vol.Range(min=POLL_MULTIPLIER_MIN, max=POLL_MULTIPLIER_MAX),
                         )
-                        for group in sorted(CONFIGURABLE_POLL_GROUPS)
+                        for group in CONFIGURABLE_POLL_GROUPS
                     }
                 ),
                 "modbus": vol.Schema(

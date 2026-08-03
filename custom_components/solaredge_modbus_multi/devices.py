@@ -257,6 +257,22 @@ class SolarEdgeInverter:
         self._last_update_timestamp = None
         self._use_status_vendor4 = False
 
+    @property
+    def gpc_may_be_supported(self) -> bool:
+        """Global power control is enabled and not ruled out by a probe.
+
+        None means undecided — entities are still created and probes still
+        run until an inverter verdict proves the capability absent.
+        """
+        return self.hub.option_detect_extras and self.global_power_control is not False
+
+    @property
+    def apc_may_be_supported(self) -> bool:
+        """Advanced power control is enabled and not ruled out by a probe."""
+        return (
+            self.hub.option_detect_extras and self.advanced_power_control is not False
+        )
+
     async def init_device(self) -> None:
         """Set up data about the device from modbus."""
 
@@ -614,10 +630,8 @@ class SolarEdgeInverter:
                 )
 
         """ Global Dynamic Power Control and Status """
-        if (
-            self.hub.option_detect_extras is True
-            and self.global_power_control is not False
-            and (self.hub.poll_due(PollGroup.SETTINGS) or not self._gpc_probed)
+        if self.gpc_may_be_supported and (
+            self.hub.poll_due(PollGroup.SETTINGS) or not self._gpc_probed
         ):
             self._gpc_probed = True
             try:
@@ -687,10 +701,8 @@ class SolarEdgeInverter:
 
         """ Advanced Power Control """
         """ Power Control Block """
-        if (
-            self.hub.option_detect_extras is True
-            and self.advanced_power_control is not False
-            and (self.hub.poll_due(PollGroup.SETTINGS) or not self._apc_probed)
+        if self.apc_may_be_supported and (
+            self.hub.poll_due(PollGroup.SETTINGS) or not self._apc_probed
         ):
             self._apc_probed = True
             try:

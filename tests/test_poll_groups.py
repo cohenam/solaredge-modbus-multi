@@ -436,6 +436,34 @@ async def test_timestamps_follow_physical_reads(make_hub) -> None:
     assert inverter.read_modbus_data.await_count == 2
 
 
+async def test_capability_gate_stays_open_until_a_verdict(make_hub) -> None:
+    """The tri-state gate: undecided (None) keeps entities and probes alive.
+
+    Only an inverter verdict (False) — or the detect-extras option being
+    off — closes it. Platforms and the probe preconditions all read these
+    properties, so this is the one place the rule is decided.
+    """
+    hub = make_hub()
+    inverter = SolarEdgeInverter(device_id=1, hub=hub)
+
+    assert inverter.gpc_may_be_supported is True  # None = undecided
+    assert inverter.apc_may_be_supported is True
+
+    inverter.global_power_control = False
+    inverter.advanced_power_control = False
+    assert inverter.gpc_may_be_supported is False
+    assert inverter.apc_may_be_supported is False
+
+    inverter.global_power_control = True
+    inverter.advanced_power_control = True
+    assert inverter.gpc_may_be_supported is True
+    assert inverter.apc_may_be_supported is True
+
+    hub._detect_extras = False
+    assert inverter.gpc_may_be_supported is False
+    assert inverter.apc_may_be_supported is False
+
+
 async def test_slow_poll_due_aliases_the_settings_group(make_hub) -> None:
     """The alias reads and writes PollGroup.SETTINGS, and nothing else."""
     hub = make_hub(slow_poll_multiplier=3)

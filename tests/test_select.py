@@ -163,6 +163,7 @@ class TestAsyncSetupEntry:
         mock_hub.option_storage_control = False
         mock_hub.option_site_limit_control = False
         mock_hub.option_detect_extras = False
+        mock_inverter_platform.apc_may_be_supported = False
 
         added_entities = []
 

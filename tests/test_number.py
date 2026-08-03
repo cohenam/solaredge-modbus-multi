@@ -1316,6 +1316,8 @@ class TestAsyncSetupEntry:
         inverter.decoded_storage_control = True
         inverter.has_battery = True
         inverter.advanced_power_control = True
+        inverter.gpc_may_be_supported = True
+        inverter.apc_may_be_supported = True
         hub.inverters = [inverter]
 
         coordinator = MagicMock()
@@ -1348,6 +1350,8 @@ class TestAsyncSetupEntry:
         inverter.decoded_storage_control = False
         inverter.has_battery = False
         inverter.advanced_power_control = False
+        inverter.gpc_may_be_supported = False
+        inverter.apc_may_be_supported = False
         hub.inverters = [inverter]
 
         coordinator = MagicMock()
