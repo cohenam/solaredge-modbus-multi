@@ -689,9 +689,6 @@ class SolarEdgeInverter:
                     "will be unavailable."
                 )
 
-            finally:
-                await self.hub.connect()
-
         """ Advanced Power Control """
         """ Power Control Block """
         if (
@@ -852,9 +849,6 @@ class SolarEdgeInverter:
                     "will be unavailable."
                 )
 
-            finally:
-                await self.hub.connect()
-
         """ Power Control Options: Site Limit Control """
         if (
             self.hub.option_site_limit_control is True
@@ -955,9 +949,6 @@ class SolarEdgeInverter:
                     "while reading data for Grid On/Off Status. This entity "
                     f"will be unavailable: {e}"
                 )
-
-            finally:
-                await self.hub.connect()
 
         log_decoded(f"I{self.inverter_unit_id}", self.decoded_model)
 

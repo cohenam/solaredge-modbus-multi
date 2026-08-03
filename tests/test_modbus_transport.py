@@ -19,7 +19,9 @@ from modbus_connection.exceptions import (
     ModbusTimeoutError,
 )
 
-from custom_components.solaredge_modbus_multi.const import ModbusExceptions
+from custom_components.solaredge_modbus_multi.const import (
+    ModbusExceptions,
+)
 from custom_components.solaredge_modbus_multi.exceptions import (
     ModbusIllegalAddress,
     ModbusIllegalFunction,
@@ -341,3 +343,29 @@ async def test_generic_write_error_is_also_an_unknown_outcome(transport) -> None
 
     assert connection.write_registers.await_count == 1
     assert transport.stats.recycles == 1
+
+
+async def test_cancelled_connect_does_not_leak_a_session(transport) -> None:
+    """A shielded connect can finish after its caller is cancelled.
+
+    modbus-connection shields its internal connect task, so cancelling the
+    caller does not cancel the connect — it can still succeed and leave a live
+    socket. These inverters accept one session, so the transport has to retire
+    the generation instead of leaving it open with nobody owning it.
+    """
+    connection = connection_double()
+
+    async def shielded_connect():
+        # Model the library: the cancellation does not stop the connect.
+        connection.connected = True
+        raise asyncio.CancelledError
+
+    connection.connect = shielded_connect
+    transport._connection_factory = lambda **kwargs: connection
+
+    with pytest.raises(asyncio.CancelledError):
+        await transport.connect()
+
+    assert transport.stats.recycles == 1
+    assert connection.close.await_count == 1, "the leaked session must be closed"
+    assert transport._connection is None

@@ -74,9 +74,16 @@ def assert_golden(path: Path, rendered: str, *, drift: str) -> None:
         f"it from git. To rebuild it deliberately, run with {variable}=1."
     )
 
-    assert json.loads(rendered) == json.loads(
-        path.read_text()
-    ), f"{drift} If intentional, re-run with {variable}=1."
+    # Rendered text, not parsed JSON: Python equality makes 1 == 1.0 == True,
+    # so a parsed comparison would accept a float or a bool where the wire
+    # needs an int. The parsed diff is only used to describe the failure.
+    committed = path.read_text()
+    if rendered != committed:
+        raise AssertionError(
+            f"{drift} If intentional, re-run with {variable}=1.\n"
+            f"parsed diff: {json.loads(rendered)!r}\n"
+            f"       != : {json.loads(committed)!r}"
+        )
 
 
 async def _call_unit_method(connection: MagicMock, name: str, *args, **kwargs):

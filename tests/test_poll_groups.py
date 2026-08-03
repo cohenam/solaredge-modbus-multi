@@ -7,6 +7,7 @@ underneath it.
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -29,6 +30,7 @@ from custom_components.solaredge_modbus_multi.diagnostics import (
 )
 from custom_components.solaredge_modbus_multi.hub import (
     DataUpdateFailed,
+    ModbusIOError,
     ModbusReadError,
     SolarEdgeInverter,
     SolarEdgeModbusMultiHub,
@@ -826,3 +828,41 @@ async def test_ext_prod_max_alone_counts_as_a_settings_read(
     assert inverter.site_limit_control is False
     assert 57362 in _addresses(calls)
     assert hub.poll_groups["settings"]["last_served_cycle"] == 0
+
+
+@pytest.mark.parametrize("address", [61440, 61696, 40113], ids=["gpc", "apc", "grid"])
+async def test_cancelled_probe_propagates_as_cancellation(
+    make_hub, mock_modbus_client, address
+) -> None:
+    """Cancellation must survive the whole device read, not just the request.
+
+    A `finally` that raises replaces the exception propagating through it, so
+    an eager reconnect after a cancelled probe would swap CancelledError for a
+    connection error — and the outer deadline could then never become
+    TimeoutError, bypassing the hub's timeout counter entirely.
+    """
+    hub = make_hub()
+    space = build_synergy_full_space()
+    calls: list[tuple[int, int]] = []
+    base = make_side_effect(space, {}, calls)
+
+    def side_effect(*args, **kwargs):
+        if kwargs.get("address", args[0] if args else 0) == address:
+            raise asyncio.CancelledError
+        return base(*args, **kwargs)
+
+    mock_modbus_client.return_value.read_holding_registers.side_effect = side_effect
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
+        mock_modbus_client,
+    ):
+        await hub.connect()
+        inverter = SolarEdgeInverter(device_id=1, hub=hub)
+        await inverter.init_device()
+
+        # A reconnect that would clobber the cancellation, if one were tried.
+        hub.connect = AsyncMock(side_effect=ModbusIOError("connect refused"))
+
+        with pytest.raises(asyncio.CancelledError):
+            await inverter.read_modbus_data()

@@ -251,6 +251,14 @@ class ModbusTransport:
             self.stats.last_error = f"connect: {type(e).__name__}"
             await self._recycle_unlocked()
             raise ModbusIOError(f"Connect to {self._host}:{self._port} failed: {e}")
+        except asyncio.CancelledError:
+            # The library shields its connect task, so cancelling the caller
+            # does not cancel the connect: it can still succeed and leave a
+            # live socket behind. These inverters accept one session, so the
+            # generation is retired rather than leaked.
+            self.stats.last_error = "connect: cancelled"
+            await self._recycle_unlocked()
+            raise
 
     async def disconnect(self, clear_client: bool = False) -> None:
         """Close the session.
