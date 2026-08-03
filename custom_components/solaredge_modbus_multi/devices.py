@@ -29,6 +29,7 @@ from .const import (
     DOMAIN,
     METER_REG_BASE,
     STATUS_VENDOR4_VERSION,
+    PollGroup,
     SolarEdgeTimeouts,
     SunSpecNotImpl,
     detect_timeout_issue_id,
@@ -240,6 +241,12 @@ class SolarEdgeInverter:
         self.has_battery = None
         self.global_power_control = None
         self.advanced_power_control = None
+        # Whether the capability probe has been attempted at all. Kept apart
+        # from the capability itself so an unresolved probe (a timeout) falls
+        # back to the settings cadence instead of retrying every cycle, while
+        # still not declaring a capability unsupported on one bad read.
+        self._gpc_probed = False
+        self._apc_probed = False
         self.site_limit_control = None
         self._grid_status = None
         self._last_update_timestamp = None
@@ -486,7 +493,7 @@ class SolarEdgeInverter:
                 }
             )
 
-            if self.use_status_vendor4:
+            if self.use_status_vendor4 and self.hub.poll_due(PollGroup.STATUS):
                 inverter_data = await self.hub.modbus_read_holding_registers(
                     unit=self.inverter_unit_id, address=40119, rcount=2
                 )
@@ -517,7 +524,7 @@ class SolarEdgeInverter:
             )
 
         """ Multiple MPPT Extension """
-        if self.decoded_mmppt is not None:
+        if self.decoded_mmppt is not None and self.hub.poll_due(PollGroup.MMPPT):
             if self.decoded_mmppt["mmppt_Units"] == 2:
                 mmppt_registers = 48
                 mmppt_unit_ids = [0, 1]
@@ -654,9 +661,10 @@ class SolarEdgeInverter:
         """ Global Dynamic Power Control and Status """
         if (
             self.hub.option_detect_extras is True
-            and (self.global_power_control is True or self.global_power_control is None)
-            and (self.hub.slow_poll_due or self.global_power_control is None)
+            and self.global_power_control is not False
+            and (self.hub.slow_poll_due or not self._gpc_probed)
         ):
+            self._gpc_probed = True
             try:
                 async with asyncio.timeout(SolarEdgeTimeouts.Read / 1000):
                     inverter_data = await self.hub.modbus_read_holding_registers(
@@ -737,12 +745,10 @@ class SolarEdgeInverter:
         """ Power Control Block """
         if (
             self.hub.option_detect_extras is True
-            and (
-                self.advanced_power_control is True
-                or self.advanced_power_control is None
-            )
-            and (self.hub.slow_poll_due or self.advanced_power_control is None)
+            and self.advanced_power_control is not False
+            and (self.hub.slow_poll_due or not self._apc_probed)
         ):
+            self._apc_probed = True
             try:
                 async with asyncio.timeout(SolarEdgeTimeouts.Read / 1000):
                     inverter_data = await self.hub.modbus_read_holding_registers(
@@ -976,7 +982,11 @@ class SolarEdgeInverter:
                 )
 
         """ Grid On/Off Status """
-        if self._grid_status is not False:
+        # `is None` keeps the availability probe on the first cycle; after
+        # that the block follows the status cadence.
+        if self._grid_status is not False and (
+            self.hub.poll_due(PollGroup.STATUS) or self._grid_status is None
+        ):
             try:
                 inverter_data = await self.hub.modbus_read_holding_registers(
                     unit=self.inverter_unit_id, address=40113, rcount=2
@@ -1481,6 +1491,7 @@ class SolarEdgeBattery:
         self.inverter_common = self.hub.inverter_common[self.inverter_unit_id]
         self._via_device = None
         self._last_update_timestamp = None
+        self._sample_generation = 0
 
         try:
             self.start_address = BATTERY_REG_BASE[self.battery_id]
@@ -1681,10 +1692,20 @@ class SolarEdgeBattery:
                 f"No response from inverter ID {self.inverter_unit_id}"
             )
 
+        # Only a completed read counts as a new sample. Energy sensors that
+        # detect a counter reset gate their per-sample bookkeeping on this, so
+        # skipped poll cycles and repeated property reads cannot inflate it.
+        self._sample_generation += 1
+
         log_decoded(f"I{self.inverter_unit_id}B{self.battery_id}", self.decoded_model)
 
     def set_last_update(self, timestamp) -> None:
         self._last_update_timestamp = timestamp
+
+    @property
+    def sample_generation(self) -> int:
+        """Monotonic count of completed reads of this battery's block."""
+        return self._sample_generation
 
     @property
     def online(self) -> bool:

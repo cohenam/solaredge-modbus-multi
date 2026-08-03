@@ -51,7 +51,8 @@ async def async_get_config_entry_diagnostics(
         "polling": {
             "connected": hub.is_connected,
             "poll_cycle": hub._poll_cycle,
-            "slow_poll_multiplier": hub._slow_poll_multiplier,
+            "poll_multipliers": hub.poll_multipliers,
+            "due_groups": hub.due_groups,
             "slow_poll_due": hub.slow_poll_due,
             "pending_slow_poll_requests": hub._slow_poll_requests,
             "pending_write": hub.has_write,

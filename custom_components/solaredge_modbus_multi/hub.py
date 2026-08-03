@@ -36,6 +36,7 @@ from .const import (
     ConfName,
     ModbusDefaults,
     ModbusExceptions,
+    PollGroup,
     RetrySettings,
     SolarEdgeTimeouts,
     check_config_issue_id,
@@ -195,18 +196,12 @@ class SolarEdgeModbusMultiHub:
             ConfName.BATTERY_ENERGY_RESET_CYCLES,
             ConfDefaultInt.BATTERY_ENERGY_RESET_CYCLES,
         )
-        self._slow_poll_multiplier = max(
-            1,
-            int(
-                entry_options.get(
-                    ConfName.SLOW_POLL_MULTIPLIER,
-                    ConfDefaultInt.SLOW_POLL_MULTIPLIER,
-                )
-            ),
-        )
+        self._poll_multipliers = self._build_poll_multipliers(entry_options)
         self._poll_cycle = -1
         self._slow_poll_requests = 0
-        self.slow_poll_due = True
+        # Everything is due until the first refresh decides otherwise, so
+        # discovery and cycle 0 always see a complete picture.
+        self._due_groups: set[PollGroup] = set(PollGroup)
         self._retry_limit = self._yaml_config.get("retry", {}).get(
             "limit", RetrySettings.Limit
         )
@@ -269,6 +264,37 @@ class SolarEdgeModbusMultiHub:
         )
 
         _LOGGER.debug(f"pymodbus version {self.pymodbus_version}")
+        _LOGGER.debug(f"poll multipliers: {self.poll_multipliers}")
+
+    def _build_poll_multipliers(self, entry_options) -> dict[PollGroup, int]:
+        """Resolve each group's cadence from options then advanced YAML.
+
+        Defaults reproduce the pre-poll-group behaviour exactly: everything
+        every cycle except the settings blocks, which keep the existing
+        slow_poll_multiplier option. A YAML `poll:` entry overrides it.
+        """
+        multipliers = dict.fromkeys(PollGroup, 1)
+        multipliers[PollGroup.SETTINGS] = max(
+            1,
+            int(
+                entry_options.get(
+                    ConfName.SLOW_POLL_MULTIPLIER,
+                    ConfDefaultInt.SLOW_POLL_MULTIPLIER,
+                )
+            ),
+        )
+
+        for name, multiplier in self._yaml_config.get("poll", {}).items():
+            group = PollGroup(name)
+            if group is PollGroup.CORE:
+                continue
+            multipliers[group] = max(1, int(multiplier))
+
+        return multipliers
+
+    def poll_due(self, group: PollGroup) -> bool:
+        """Whether this refresh reads the blocks belonging to `group`."""
+        return group in self._due_groups
 
     async def _async_init_solaredge(self) -> None:
         """Detect devices and load initial modbus data from inverters."""
@@ -528,22 +554,28 @@ class SolarEdgeModbusMultiHub:
         # instead of being cleared by this refresh's completion.
         next_cycle = self._poll_cycle + 1
         served_slow_poll_requests = self._slow_poll_requests
-        self.slow_poll_due = (
-            served_slow_poll_requests > 0
-            or next_cycle % self._slow_poll_multiplier == 0
-        )
+        self._due_groups = {
+            group
+            for group, multiplier in self._poll_multipliers.items()
+            if next_cycle % multiplier == 0
+        }
+        if served_slow_poll_requests > 0:
+            self._due_groups.add(PollGroup.SETTINGS)
 
         try:
             async with asyncio.timeout(self.coordinator_timeout):
                 # Read all devices sequentially with batch lock per device
                 for inv in self.inverters:
                     await self._poll_device_with_lock(inv)
-                for meter in self.meters:
-                    await self._poll_device_with_lock(meter)
-                for bat in self.batteries:
-                    await self._poll_device_with_lock(bat)
-                for evse in self.evses:
-                    await self._poll_device_with_lock(evse)
+                if self.poll_due(PollGroup.METER):
+                    for meter in self.meters:
+                        await self._poll_device_with_lock(meter)
+                if self.poll_due(PollGroup.BATTERY):
+                    for bat in self.batteries:
+                        await self._poll_device_with_lock(bat)
+                if self.poll_due(PollGroup.EVSE):
+                    for evse in self.evses:
+                        await self._poll_device_with_lock(evse)
 
         except (
             ModbusReadError,
@@ -608,13 +640,17 @@ class SolarEdgeModbusMultiHub:
         if not self.keep_modbus_open:
             await self.disconnect()
 
+        # Timestamps follow physical reads: a device whose group was skipped
+        # must not claim a refresh it never got.
         timestamp = dt.now()
         for inverter in self.inverters:
             inverter.set_last_update(timestamp)
-        for meter in self.meters:
-            meter.set_last_update(timestamp)
-        for battery in self.batteries:
-            battery.set_last_update(timestamp)
+        if self.poll_due(PollGroup.METER):
+            for meter in self.meters:
+                meter.set_last_update(timestamp)
+        if self.poll_due(PollGroup.BATTERY):
+            for battery in self.batteries:
+                battery.set_last_update(timestamp)
 
         return True
 
@@ -851,6 +887,31 @@ class SolarEdgeModbusMultiHub:
     @property
     def option_detect_extras(self) -> bool:
         return self._detect_extras
+
+    @property
+    def poll_multipliers(self) -> dict[str, int]:
+        """Resolved cadence per group, for diagnostics."""
+        return {
+            f"{group}": multiplier
+            for group, multiplier in self._poll_multipliers.items()
+        }
+
+    @property
+    def due_groups(self) -> list[str]:
+        """Groups this refresh is reading, for diagnostics."""
+        return sorted(f"{group}" for group in self._due_groups)
+
+    @property
+    def slow_poll_due(self) -> bool:
+        """Alias kept so the settings-tier guards read unchanged."""
+        return PollGroup.SETTINGS in self._due_groups
+
+    @slow_poll_due.setter
+    def slow_poll_due(self, value: bool) -> None:
+        if value:
+            self._due_groups.add(PollGroup.SETTINGS)
+        else:
+            self._due_groups.discard(PollGroup.SETTINGS)
 
     @property
     def keep_modbus_open(self) -> bool:

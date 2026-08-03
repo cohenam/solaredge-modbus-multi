@@ -117,6 +117,30 @@ class BatteryLimit(IntEnum):
     DischargeMax = 1000000  # watts
 
 
+class PollGroup(StrEnum):
+    """Read-block families that can be polled at independent cadences.
+
+    Modbus reads are block reads, so a group is the finest granularity at
+    which polling can be thinned: entities sharing one read cannot be
+    split apart without adding transactions.
+    """
+
+    CORE = "core"  # inverter model block — the reason the integration exists
+    METER = "meter"
+    BATTERY = "battery"
+    STATUS = "status"  # grid on/off, status vendor 4
+    MMPPT = "mmppt"
+    EVSE = "evse"
+    SETTINGS = "settings"  # power control, site limit, storage
+
+
+# CORE is deliberately not configurable: thinning it would defeat the point.
+CONFIGURABLE_POLL_GROUPS: Final = frozenset(PollGroup) - {PollGroup.CORE}
+
+POLL_MULTIPLIER_MIN: Final = 1
+POLL_MULTIPLIER_MAX: Final = 60
+
+
 class ConfDefaultInt(IntEnum):
     """Defaults for options that are integers."""
 

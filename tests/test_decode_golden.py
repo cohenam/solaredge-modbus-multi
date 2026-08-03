@@ -315,9 +315,11 @@ def make_side_effect(space, overrides, calls):
 
 @pytest.fixture
 def make_hub(hass, mock_config_entry_data):
-    def _make(options: dict) -> SolarEdgeModbusMultiHub:
+    def _make(
+        options: dict, yaml_config: dict | None = None
+    ) -> SolarEdgeModbusMultiHub:
         hass.data.setdefault(DOMAIN, {})
-        hass.data[DOMAIN]["yaml"] = {}
+        hass.data[DOMAIN]["yaml"] = yaml_config or {}
         return SolarEdgeModbusMultiHub(
             hass,
             entry_id="decode_golden",
@@ -493,3 +495,114 @@ async def test_transaction_counts_per_cycle(
         (40238, 107),
         (57668, 86),
     ]
+
+
+async def test_transaction_counts_with_poll_groups(
+    make_hub, mock_modbus_client, mock_config_entry_options
+) -> None:
+    """Per-group cadences thin the read sequence by whole blocks.
+
+    Drives the real refresh loop (not the device reads directly) so the
+    hub-level meter/battery/EVSE gating is exercised alongside the
+    in-device status and MMPPT guards. The literals below are derived from
+    the multipliers, not hand-copied: change a multiplier and the expected
+    sequence changes with it.
+    """
+    options = {
+        **mock_config_entry_options,
+        ConfName.DETECT_EXTRAS: False,
+        ConfName.SLOW_POLL_MULTIPLIER: 6,
+    }
+    hub = make_hub(options, {"poll": {"status": 6, "battery": 3, "mmppt": 6}})
+
+    space = build_synergy_full_space()
+    calls: list[tuple[int, int]] = []
+    client = mock_modbus_client.return_value
+    client.read_holding_registers.side_effect = make_side_effect(space, {}, calls)
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await hub.connect()
+
+        inverter = SolarEdgeInverter(device_id=1, hub=hub)
+        await inverter.init_device()
+        meter = SolarEdgeMeter(device_id=1, meter_id=1, hub=hub)
+        await meter.init_device()
+        battery = SolarEdgeBattery(device_id=1, battery_id=1, hub=hub)
+        await battery.init_device()
+        hub.inverters.append(inverter)
+        hub.meters.append(meter)
+        hub.batteries.append(battery)
+        hub.initalized = True
+
+        cycles: list[list[tuple[int, int]]] = []
+        for _ in range(6):
+            calls.clear()
+            await hub.async_refresh_modbus_data()
+            cycles.append(list(calls))
+
+    core = [(40044, 65), (40238, 107)]  # inverter model + meter
+    battery_block = [(57668, 86)]
+
+    # Cycle 0 is aligned for every group; then status/mmppt (6) and
+    # battery (3) drop out until their multiple comes round again.
+    assert cycles[0] == [
+        (40044, 65),  # inverter model            core
+        (40119, 2),  # I_Status_Vendor4          status
+        (40123, 48),  # MMPPT data                mmppt
+        (40113, 2),  # Grid status               status
+        (40238, 107),  # Meter data (Synergy +50)  core
+        (57668, 86),  # Battery data              battery
+    ]
+    assert cycles[1] == core
+    assert cycles[2] == core
+    assert cycles[3] == [*core, *battery_block]
+    assert cycles[4] == core
+    assert cycles[5] == core
+
+    # 6 aligned cycles: 12 core + 2 status + 1 mmppt + 2 battery = 17.
+    assert sum(len(cycle) for cycle in cycles) == 17
+
+    # A skipped group must keep its decoded values, not drop them.
+    assert "I_Grid_Status" in inverter.decoded_model
+    assert "I_Status_Vendor4" in inverter.decoded_model
+
+
+async def test_poll_group_defaults_reproduce_untiered_reads(
+    make_hub, mock_modbus_client, mock_config_entry_options
+) -> None:
+    """With no YAML poll config nothing is thinned: same sequence every cycle."""
+    options = {**mock_config_entry_options, ConfName.DETECT_EXTRAS: False}
+    hub = make_hub(options)
+
+    space = build_synergy_full_space()
+    calls: list[tuple[int, int]] = []
+    client = mock_modbus_client.return_value
+    client.read_holding_registers.side_effect = make_side_effect(space, {}, calls)
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await hub.connect()
+
+        inverter = SolarEdgeInverter(device_id=1, hub=hub)
+        await inverter.init_device()
+        meter = SolarEdgeMeter(device_id=1, meter_id=1, hub=hub)
+        await meter.init_device()
+        battery = SolarEdgeBattery(device_id=1, battery_id=1, hub=hub)
+        await battery.init_device()
+        hub.inverters.append(inverter)
+        hub.meters.append(meter)
+        hub.batteries.append(battery)
+        hub.initalized = True
+
+        cycles = []
+        for _ in range(4):
+            calls.clear()
+            await hub.async_refresh_modbus_data()
+            cycles.append(list(calls))
+
+    assert cycles[0] == cycles[1] == cycles[2] == cycles[3]

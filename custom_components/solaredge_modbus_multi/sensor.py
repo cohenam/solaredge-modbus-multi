@@ -1785,6 +1785,8 @@ class SolarEdgeBatteryEnergyExport(SolarEdgeSensorBase):
         self._last = None
         self._count = 0
         self._log_once = None
+        self._last_generation = None
+        self._cached_value = None
 
     @property
     def native_value(self):
@@ -1798,6 +1800,16 @@ class SolarEdgeBatteryEnergyExport(SolarEdgeSensorBase):
                 return None
 
             else:
+                # The reset threshold counts physical reads: this property is
+                # evaluated several times per update (state write, templates)
+                # and the battery block may be polled less often than the
+                # coordinator cycles, so bookkeeping runs once per sample.
+                if self._platform.sample_generation == self._last_generation:
+                    return self._cached_value
+
+                self._last_generation = self._platform.sample_generation
+                self._cached_value = None
+
                 try:
                     if self._last is None:
                         self._last = 0
@@ -1809,7 +1821,10 @@ class SolarEdgeBatteryEnergyExport(SolarEdgeSensorBase):
                         if self._platform.allow_battery_energy_reset:
                             self._count = 0
 
-                        return self._platform.decoded_model["B_Export_Energy_WH"]
+                        self._cached_value = self._platform.decoded_model[
+                            "B_Export_Energy_WH"
+                        ]
+                        return self._cached_value
 
                     else:
                         if (
@@ -1870,6 +1885,8 @@ class SolarEdgeBatteryEnergyImport(SolarEdgeSensorBase):
         self._last = None
         self._count = 0
         self._log_once = None
+        self._last_generation = None
+        self._cached_value = None
 
     @property
     def native_value(self):
@@ -1883,6 +1900,16 @@ class SolarEdgeBatteryEnergyImport(SolarEdgeSensorBase):
                 return None
 
             else:
+                # The reset threshold counts physical reads: this property is
+                # evaluated several times per update (state write, templates)
+                # and the battery block may be polled less often than the
+                # coordinator cycles, so bookkeeping runs once per sample.
+                if self._platform.sample_generation == self._last_generation:
+                    return self._cached_value
+
+                self._last_generation = self._platform.sample_generation
+                self._cached_value = None
+
                 try:
                     if self._last is None:
                         self._last = 0
@@ -1894,7 +1921,10 @@ class SolarEdgeBatteryEnergyImport(SolarEdgeSensorBase):
                         if self._platform.allow_battery_energy_reset:
                             self._count = 0
 
-                        return self._platform.decoded_model["B_Import_Energy_WH"]
+                        self._cached_value = self._platform.decoded_model[
+                            "B_Import_Energy_WH"
+                        ]
+                        return self._cached_value
 
                     else:
                         if (
