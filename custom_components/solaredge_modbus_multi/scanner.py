@@ -4,11 +4,11 @@ Scans Modbus device IDs by reading the SunSpec common-block header
 (40000, 9 registers) and matching the SolarEdge signature: "SunS",
 DID 1, length 65, manufacturer "SolarEdge".
 
-Built on ModbusTransport (pymodbus) rather than a raw socket, so MBAP
-framing is length-aware (fragmented TCP responses are reassembled),
-transaction/unit IDs are matched by the transaction layer (a stale frame
-becomes a timeout, not a phantom "other device"), and exception PDUs are
-classified as a responding non-inverter device.
+Built on ModbusTransport rather than a raw socket, so MBAP framing is
+length-aware (fragmented TCP responses are reassembled), transaction/unit
+IDs are matched by the transaction layer (a stale frame becomes a
+timeout, not a phantom "other device"), and exception PDUs are classified
+as a responding non-inverter device.
 
 Original raw-socket approach based on work by thargy:
 https://github.com/thargy/modbus-scanner
@@ -23,14 +23,24 @@ import asyncio
 import logging
 
 from homeassistant.exceptions import HomeAssistantError
-from pymodbus.exceptions import ConnectionException, ModbusIOException
 
-try:  # pymodbus 3.11.1+
-    from pymodbus.pdu.pdu import ExceptionResponse
-except ImportError:  # older pymodbus
-    from pymodbus.pdu import ExceptionResponse
-
+from .exceptions import (
+    ModbusIllegalAddress,
+    ModbusIllegalFunction,
+    ModbusIllegalValue,
+    ModbusIOError,
+    ModbusReadError,
+)
 from .modbus_transport import ModbusTransport
+
+# An exception PDU is the only positive proof that something is answering at
+# an ID: timeouts, connection drops and malformed frames all mean "unknown".
+ANSWERED_WITH_EXCEPTION = (
+    ModbusIllegalAddress,
+    ModbusIllegalFunction,
+    ModbusIllegalValue,
+    ModbusReadError,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -165,7 +175,7 @@ class SolarEdgeDeviceScanner:
                 )
 
             if not self._transport.connected:
-                await self._transport.disconnect(clear_client=True)
+                await self._transport.recycle()
                 attempt += 1
                 await asyncio.sleep(1.0)
 
@@ -177,7 +187,7 @@ class SolarEdgeDeviceScanner:
 
     async def disconnect(self) -> None:
         """Close the Modbus/TCP session."""
-        await self._transport.disconnect(clear_client=True)
+        await self._transport.recycle()
 
     @staticmethod
     def _is_solaredge_signature(registers: list[int]) -> bool:
@@ -209,23 +219,23 @@ class SolarEdgeDeviceScanner:
         """
         attempt = 1
 
-        # Response waiting is governed by the pymodbus request timeout
-        # (scan_timeout): a silent or mismatched (stale txn / wrong unit)
-        # response surfaces as ModbusIOException after `timeout` seconds.
-        # After any failure the client is dropped and rebuilt, so every
-        # attempt starts from a clean connection state.
+        # Response waiting is governed by the request timeout (scan_timeout):
+        # a silent or mismatched (stale txn / wrong unit) response surfaces as
+        # ModbusIOError after `timeout` seconds. The transport retires the
+        # connection on any such failure, so every attempt starts from a clean
+        # connection state.
         while attempt <= self._scan_retries:
             if not self._transport.connected:
                 try:
                     async with asyncio.timeout(self._connect_timeout):
                         await self._transport.connect()
-                except (TimeoutError, OSError, ConnectionException):
-                    await self._transport.disconnect(clear_client=True)
+                except (TimeoutError, OSError, ModbusIOError):
+                    await self._transport.recycle()
                     attempt += 1
                     continue
 
                 if not self._transport.connected:
-                    await self._transport.disconnect(clear_client=True)
+                    await self._transport.recycle()
                     attempt += 1
                     continue
 
@@ -235,23 +245,17 @@ class SolarEdgeDeviceScanner:
                     device_id, SUNSPEC_COMMON_ADDRESS, SUNSPEC_COMMON_HEADER_COUNT
                 )
 
-            except (ConnectionException, ModbusIOException, OSError) as e:
-                _LOGGER.debug(f" FAILED: {e}")
-                await self._transport.disconnect(clear_client=True)
-                attempt += 1
-                continue
-
-            if isinstance(result, ModbusIOException):
-                _LOGGER.debug(f" No response from ID {device_id}: {result}")
-                await self._transport.disconnect(clear_client=True)
-                attempt += 1
-                continue
-
-            if isinstance(result, ExceptionResponse) or result.isError():
-                # A device answered (even if with a Modbus exception), so
-                # something real is at this ID — just not a usable inverter.
-                _LOGGER.debug(f" ID {device_id} answered with error: {result}")
+            except ANSWERED_WITH_EXCEPTION as e:
+                # A device answered, even if only to refuse, so something real
+                # is at this ID — just not a usable inverter.
+                _LOGGER.debug(f" ID {device_id} answered with error: {e}")
                 return self.FOUND
+
+            except (ModbusIOError, OSError) as e:
+                _LOGGER.debug(f" FAILED: {e}")
+                await self._transport.recycle()
+                attempt += 1
+                continue
 
             if len(result.registers) != SUNSPEC_COMMON_HEADER_COUNT:
                 _LOGGER.debug(

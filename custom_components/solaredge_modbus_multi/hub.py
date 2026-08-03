@@ -16,13 +16,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt
-from pymodbus.client import AsyncModbusTcpClient
-from pymodbus.exceptions import ConnectionException, ModbusIOException
-
-try:  # pymodbus 3.11.1+
-    from pymodbus.pdu.pdu import ExceptionResponse
-except ImportError:  # older pymodbus
-    from pymodbus.pdu import ExceptionResponse
 
 from .const import (
     BATTERY_REG_BASE,
@@ -35,7 +28,6 @@ from .const import (
     ConfDefaultStr,
     ConfName,
     ModbusDefaults,
-    ModbusExceptions,
     PollGroup,
     RetrySettings,
     SolarEdgeTimeouts,
@@ -235,8 +227,6 @@ class SolarEdgeModbusMultiHub:
         self._uncommitted_power_settings: set[int] = set()
         self._uncommitted_warned = False
 
-        # The factory resolves this module's AsyncModbusTcpClient at call
-        # time, so tests patching hub.AsyncModbusTcpClient keep working.
         self._transport = ModbusTransport(
             host=self._host,
             port=self._port,
@@ -244,7 +234,6 @@ class SolarEdgeModbusMultiHub:
             retries=self._mb_retries,
             reconnect_delay=self._mb_reconnect_delay,
             reconnect_delay_max=self._mb_reconnect_delay_max,
-            client_factory=lambda **kwargs: AsyncModbusTcpClient(**kwargs),
         )
 
         self._pymodbus_version = pymodbus_version
@@ -495,8 +484,7 @@ class SolarEdgeModbusMultiHub:
             ModbusIllegalFunction,
             ModbusIllegalValue,
             DeviceInvalid,
-            ConnectionException,
-            ModbusIOException,
+            ModbusIOError,
             TimeoutError,
         ) as e:
             await self.disconnect()
@@ -506,10 +494,8 @@ class SolarEdgeModbusMultiHub:
                 raise HubInitFailed(f"Read error: {e}")
             if isinstance(e, DeviceInvalid):
                 raise HubInitFailed(f"Invalid device: {e}")
-            if isinstance(e, ConnectionException):
+            if isinstance(e, ModbusIOError):
                 raise HubInitFailed(f"Connection failed: {e}")
-            if isinstance(e, ModbusIOException):
-                raise HubInitFailed(f"Modbus error: {e}")
             raise HubInitFailed(f"Timeout error: {e}")
 
         self.initalized = True
@@ -524,7 +510,7 @@ class SolarEdgeModbusMultiHub:
                 async with asyncio.timeout(self.coordinator_timeout):
                     await self._async_init_solaredge()
 
-            except (ConnectionException, ModbusIOException, TimeoutError) as e:
+            except (ModbusIOError, TimeoutError) as e:
                 await self.disconnect()
                 ir.async_create_issue(
                     self._hass,
@@ -613,8 +599,7 @@ class SolarEdgeModbusMultiHub:
             ModbusIllegalFunction,
             ModbusIllegalValue,
             DeviceInvalid,
-            ConnectionException,
-            ModbusIOException,
+            ModbusIOError,
         ) as e:
             await self.disconnect()
             if isinstance(
@@ -623,9 +608,7 @@ class SolarEdgeModbusMultiHub:
                 raise DataUpdateFailed(f"Update failed: {e}")
             if isinstance(e, DeviceInvalid):
                 raise DataUpdateFailed(f"Invalid device: {e}")
-            if isinstance(e, ConnectionException):
-                raise DataUpdateFailed(f"Connection failed: {e}")
-            raise DataUpdateFailed(f"Modbus error: {e}")
+            raise DataUpdateFailed(f"Connection failed: {e}")
 
         except TimeoutError as e:
             await self.disconnect(clear_client=True)
@@ -716,42 +699,11 @@ class SolarEdgeModbusMultiHub:
         await self.disconnect(clear_client=True)
 
     def _validate_read_result(self, unit, address, rcount, result):
-        """Map error responses to exceptions and enforce the register count."""
+        """Enforce the register count.
 
-        if _LOGGER.isEnabledFor(logging.DEBUG):
-            _LOGGER.debug(f"I{unit}: result is error: {result.isError()} ")
-
-        if result.isError():
-            _LOGGER.debug(f"I{unit}: error result: {type(result)} ")
-
-            # Sanitized: type/code only, never payload or host details.
-            if type(result) is ExceptionResponse:
-                self._transport.stats.last_error = (
-                    f"read unit {unit}: ExceptionResponse"
-                    f"(code={result.exception_code})"
-                )
-            else:
-                self._transport.stats.last_error = (
-                    f"read unit {unit}: {type(result).__name__}"
-                )
-
-            if type(result) is ModbusIOException:
-                raise ModbusIOError(result)
-
-            if type(result) is ExceptionResponse:
-                if result.exception_code == ModbusExceptions.IllegalAddress:
-                    _LOGGER.debug(f"I{unit} Read IllegalAddress: {result}")
-                    raise ModbusIllegalAddress(result)
-
-                if result.exception_code == ModbusExceptions.IllegalFunction:
-                    _LOGGER.debug(f"I{unit} Read IllegalFunction: {result}")
-                    raise ModbusIllegalFunction(result)
-
-                if result.exception_code == ModbusExceptions.IllegalValue:
-                    _LOGGER.debug(f"I{unit} Read IllegalValue: {result}")
-                    raise ModbusIllegalValue(result)
-
-            raise ModbusReadError(result)
+        Error responses are already mapped to our exception hierarchy by the
+        transport, which is where the library's types stop.
+        """
 
         if _LOGGER.isEnabledFor(logging.DEBUG):
             _LOGGER.debug(
@@ -805,46 +757,31 @@ class SolarEdgeModbusMultiHub:
             )
 
         try:
-            result = await self._transport.write_registers_raw(unit, address, payload)
+            await self._transport.write_registers_raw(unit, address, payload)
 
-        except ModbusIOException as e:
-            await self.disconnect()
+        except ModbusIllegalAddress:
+            raise HomeAssistantError(f"Address not supported at device at ID {unit}.")
 
+        except ModbusIllegalFunction:
+            raise HomeAssistantError(f"Function not supported by device at ID {unit}.")
+
+        except ModbusIllegalValue:
+            raise HomeAssistantError(f"Value invalid for device at ID {unit}.")
+
+        except ModbusIOError as e:
+            # Outcome unknown: the frame may have been applied before the
+            # response was lost. The transport has already retired the
+            # connection; never re-send a power-control write on its own.
+            _LOGGER.error(f"Write to inverter ID {unit} had no response: {e}")
+            raise HomeAssistantError(
+                f"No response from inverter ID {unit}; the write at address "
+                f"{address} may or may not have been applied."
+            )
+
+        except ModbusWriteError as e:
             raise HomeAssistantError(
                 f"Error sending command to inverter ID {unit}: {e}."
             )
-
-        except ConnectionException as e:
-            await self.disconnect()
-
-            _LOGGER.error(f"Connection failed: {e}")
-            raise HomeAssistantError(f"Connection to inverter ID {unit} failed.")
-
-        if result.isError():
-            if type(result) is ModbusIOException:
-                await self.disconnect()
-                _LOGGER.error(f"Write failed: No response from inverter ID {unit}.")
-                raise HomeAssistantError(f"No response from inverter ID {unit}.")
-
-            if type(result) is ExceptionResponse:
-                if result.exception_code == ModbusExceptions.IllegalAddress:
-                    _LOGGER.debug(f"Unit {unit} Write IllegalAddress: {result}")
-                    raise HomeAssistantError(
-                        f"Address not supported at device at ID {unit}."
-                    )
-
-                if result.exception_code == ModbusExceptions.IllegalFunction:
-                    _LOGGER.debug(f"Unit {unit} Write IllegalFunction: {result}")
-                    raise HomeAssistantError(
-                        f"Function not supported by device at ID {unit}."
-                    )
-
-                if result.exception_code == ModbusExceptions.IllegalValue:
-                    _LOGGER.debug(f"Unit {unit} Write IllegalValue: {result}")
-                    raise HomeAssistantError(f"Value invalid for device at ID {unit}.")
-
-            await self.disconnect()
-            raise ModbusWriteError(result)
 
         self.has_write = address
         # Control registers changed: request a slow-block re-read. A counter
@@ -1081,11 +1018,11 @@ class SolarEdgeModbusMultiHub:
     # through the hub.
     @property
     def _client(self):
-        return self._transport._client
+        return self._transport._connection
 
     @_client.setter
     def _client(self, value) -> None:
-        self._transport._client = value
+        self._transport._connection = value
 
     @property
     def _modbus_lock(self) -> asyncio.Lock:

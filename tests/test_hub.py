@@ -7,12 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError
-from pymodbus.exceptions import ConnectionException, ModbusIOException
-
-try:
-    from pymodbus.pdu.pdu import ExceptionResponse  # noqa: F401
-except ImportError:
-    pass
+from modbus_connection.exceptions import ModbusConnectionError, ModbusError
 
 from custom_components.solaredge_modbus_multi.const import DOMAIN, ModbusExceptions
 from custom_components.solaredge_modbus_multi.hub import (
@@ -49,7 +44,7 @@ def mock_hub(hass, mock_config_entry_data, mock_config_entry_options):
 async def test_hub_connect(mock_hub, mock_modbus_client) -> None:
     """Test hub connection."""
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -63,7 +58,7 @@ async def test_hub_concurrent_connect_is_idempotent(
 ) -> None:
     """Concurrent callers share one connection attempt."""
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await asyncio.gather(mock_hub.connect(), mock_hub.connect())
@@ -81,7 +76,7 @@ async def test_hub_reconnects_existing_disconnected_client(
     mock_client = mock_modbus_client.return_value
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -98,7 +93,7 @@ async def test_hub_reconnects_existing_disconnected_client(
 async def test_hub_disconnect(mock_hub, mock_modbus_client) -> None:
     """Test hub disconnection."""
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -110,7 +105,7 @@ async def test_hub_disconnect(mock_hub, mock_modbus_client) -> None:
 async def test_hub_disconnect_clear_client(mock_hub, mock_modbus_client) -> None:
     """Test hub disconnection with client clearing."""
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -131,7 +126,7 @@ async def test_hub_read_registers(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -144,13 +139,17 @@ async def test_hub_read_registers(
 
 async def test_hub_read_registers_error(mock_hub, mock_modbus_client) -> None:
     """Test reading modbus registers with error response."""
+    from tests.conftest import create_exception_response
+
     mock_client = mock_modbus_client.return_value
-    error_response = MagicMock()
-    error_response.isError.return_value = True
-    mock_client.read_holding_registers.return_value = error_response
+    # DeviceFailure is not one of the illegal-* codes, so it stays a plain
+    # read error rather than mapping to a specific exception type.
+    mock_client.read_holding_registers.return_value = create_exception_response(
+        ModbusExceptions.DeviceFailure
+    )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -187,7 +186,7 @@ async def test_hub_modbus_lock_prevents_race_condition(
     mock_client.read_holding_registers = tracked_read
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -217,7 +216,7 @@ async def test_hub_modbus_lock_prevents_race_condition(
 async def test_hub_shutdown(mock_hub, mock_modbus_client) -> None:
     """Test hub shutdown."""
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -244,7 +243,7 @@ async def test_hub_init_pymodbus_version_check_fail(
 ) -> None:
     """Test hub initialization fails with old pymodbus version."""
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         with patch.object(mock_hub, "_pymodbus_version", "3.0.0"):
@@ -260,7 +259,7 @@ async def test_hub_init_connection_failed(mock_hub, mock_modbus_client) -> None:
     mock_modbus_client.return_value.connected = False
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -287,7 +286,7 @@ async def test_hub_init_inverter_device_invalid(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -298,14 +297,13 @@ async def test_hub_init_inverter_device_invalid(
 
 async def test_hub_init_inverter_modbus_io_error(mock_hub, mock_modbus_client) -> None:
     """Test hub initialization fails with ModbusIOError."""
-    mock_client = mock_modbus_client.return_value
+    from tests.conftest import create_io_exception_response
 
-    error_response = MagicMock(spec=ModbusIOException)
-    error_response.isError.return_value = True
-    mock_client.read_holding_registers.return_value = error_response
+    mock_client = mock_modbus_client.return_value
+    mock_client.read_holding_registers.return_value = create_io_exception_response()
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -320,7 +318,7 @@ async def test_hub_init_inverter_timeout_error(mock_hub, mock_modbus_client) -> 
     mock_client.read_holding_registers.side_effect = TimeoutError("Timeout")
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -339,7 +337,7 @@ async def test_hub_init_illegal_response_is_read_error(
 
     with (
         patch(
-            "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+            "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
             mock_modbus_client,
         ),
         patch.object(SolarEdgeInverter, "init_device", new=AsyncMock()),
@@ -365,10 +363,12 @@ async def test_refresh_modbus_data_connection_failed(
 ) -> None:
     """Test refresh fails when connection cannot be established."""
     mock_hub._initalized = True
+    # connect() returns, but the link never comes up.
+    mock_modbus_client.return_value.connect = AsyncMock()
     mock_modbus_client.return_value.connected = False
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         mock_hub._client = mock_modbus_client.return_value
@@ -391,7 +391,7 @@ async def test_refresh_modbus_data_timeout_with_retries(
     mock_hub.inverters = [inverter]
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -422,7 +422,7 @@ async def test_refresh_modbus_data_modbus_read_error(
     mock_hub.inverters = [inverter]
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -443,7 +443,7 @@ async def test_refresh_illegal_response_is_update_error(
     mock_hub.inverters = [inverter]
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -454,20 +454,22 @@ async def test_refresh_illegal_response_is_update_error(
     mock_modbus_client.return_value.close.assert_called_once()
 
 
-async def test_refresh_modbus_data_connection_exception(
-    mock_hub, mock_modbus_client
-) -> None:
-    """Test refresh fails with ConnectionException."""
+async def test_refresh_modbus_data_io_error(mock_hub, mock_modbus_client) -> None:
+    """Test refresh fails with ModbusIOError.
+
+    A dropped link surfaces as ModbusIOError now: the transport maps the
+    library's connection/timeout errors before the hub sees them.
+    """
     mock_hub._initalized = True
 
     inverter = MagicMock()
     inverter.read_modbus_data = AsyncMock(
-        side_effect=ConnectionException("Connection failed")
+        side_effect=ModbusIOError("Connection failed")
     )
     mock_hub.inverters = [inverter]
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -483,12 +485,8 @@ async def test_write_registers_success(mock_hub, mock_modbus_client) -> None:
     """Test successful register write."""
     mock_client = mock_modbus_client.return_value
 
-    success_response = MagicMock()
-    success_response.isError.return_value = False
-    mock_client.write_registers.return_value = success_response
-
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -497,15 +495,15 @@ async def test_write_registers_success(mock_hub, mock_modbus_client) -> None:
         mock_client.write_registers.assert_called_once()
 
 
-async def test_write_registers_modbus_io_exception(
+async def test_write_registers_generic_modbus_error(
     mock_hub, mock_modbus_client
 ) -> None:
-    """Test write fails with ModbusIOException."""
+    """Test write fails with a library error that is not a lost response."""
     mock_client = mock_modbus_client.return_value
-    mock_client.write_registers.side_effect = ModbusIOException("IO Error")
+    mock_client.write_registers.side_effect = ModbusError("IO Error")
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -514,20 +512,25 @@ async def test_write_registers_modbus_io_exception(
             await mock_hub.write_registers(unit=1, address=40000, payload=[100])
 
 
-async def test_write_registers_connection_exception(
-    mock_hub, mock_modbus_client
-) -> None:
-    """Test write fails with ConnectionException."""
+async def test_write_registers_connection_error(mock_hub, mock_modbus_client) -> None:
+    """A link drop mid-write is reported as an unknown outcome, not a failure.
+
+    The old hub answered a ConnectionException with "Connection to inverter
+    ID n failed."; a lost write is now never claimed to have failed, because
+    the frame may already have been applied.
+    """
     mock_client = mock_modbus_client.return_value
-    mock_client.write_registers.side_effect = ConnectionException("Connection failed")
+    mock_client.write_registers.side_effect = ModbusConnectionError("Connection failed")
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
 
-        with pytest.raises(HomeAssistantError, match="Connection to inverter"):
+        with pytest.raises(
+            HomeAssistantError, match="may or may not have been applied"
+        ):
             await mock_hub.write_registers(unit=1, address=40000, payload=[100])
 
 
@@ -541,7 +544,7 @@ async def test_write_registers_error_response_io_exception(
     mock_client.write_registers.return_value = create_io_exception_response()
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -560,7 +563,7 @@ async def test_write_registers_illegal_address(mock_hub, mock_modbus_client) -> 
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -579,7 +582,7 @@ async def test_write_registers_illegal_function(mock_hub, mock_modbus_client) ->
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -598,7 +601,7 @@ async def test_write_registers_illegal_value(mock_hub, mock_modbus_client) -> No
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -610,14 +613,9 @@ async def test_write_registers_illegal_value(mock_hub, mock_modbus_client) -> No
 async def test_write_registers_sleep_after_write(mock_hub, mock_modbus_client) -> None:
     """Test write includes sleep delay when configured."""
     mock_hub._sleep_after_write = 1
-    mock_client = mock_modbus_client.return_value
-
-    success_response = MagicMock()
-    success_response.isError.return_value = False
-    mock_client.write_registers.return_value = success_response
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
@@ -634,11 +632,6 @@ async def test_write_registers_cancelled_during_sleep(
     import asyncio as aio
 
     mock_hub._sleep_after_write = 1
-    mock_client = mock_modbus_client.return_value
-
-    success_response = MagicMock()
-    success_response.isError.return_value = False
-    mock_client.write_registers.return_value = success_response
 
     sleeping = aio.Event()
 
@@ -647,7 +640,7 @@ async def test_write_registers_cancelled_during_sleep(
         await aio.Future()  # sleeps until cancelled
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -683,7 +676,7 @@ async def test_modbus_read_illegal_address(mock_hub, mock_modbus_client) -> None
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -704,7 +697,7 @@ async def test_modbus_read_illegal_function(mock_hub, mock_modbus_client) -> Non
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -725,7 +718,7 @@ async def test_modbus_read_illegal_value(mock_hub, mock_modbus_client) -> None:
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -744,7 +737,7 @@ async def test_modbus_read_io_exception(mock_hub, mock_modbus_client) -> None:
     mock_client.read_holding_registers.return_value = create_io_exception_response()
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -768,7 +761,7 @@ async def test_modbus_read_register_count_mismatch(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -802,7 +795,7 @@ async def test_inverter_init_device_success(
     mock_client.read_holding_registers.side_effect = read_side_effect
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -825,7 +818,7 @@ async def test_inverter_init_device_modbus_io_error(
     mock_client.read_holding_registers.return_value = create_io_exception_response()
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -848,7 +841,7 @@ async def test_inverter_init_device_illegal_address(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -876,7 +869,7 @@ async def test_inverter_init_device_invalid_sunspec_id(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -916,7 +909,7 @@ async def test_inverter_read_modbus_data_success(
     mock_client.read_holding_registers.side_effect = read_side_effect
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -952,7 +945,7 @@ async def test_inverter_read_modbus_data_invalid_device(
     mock_client.read_holding_registers.side_effect = read_side_effect
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -996,7 +989,7 @@ async def test_inverter_read_modbus_data_with_mmppt(
     mock_client.read_holding_registers.side_effect = read_side_effect
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -1065,7 +1058,7 @@ async def test_meter_init_device_success(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -1097,7 +1090,7 @@ async def test_meter_init_device_invalid_did(mock_hub, mock_modbus_client) -> No
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -1139,7 +1132,7 @@ async def test_meter_read_modbus_data_did_201(mock_hub, mock_modbus_client) -> N
     mock_client.read_holding_registers.side_effect = read_side_effect
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -1178,7 +1171,7 @@ async def test_meter_read_modbus_data_did_203(mock_hub, mock_modbus_client) -> N
     mock_client.read_holding_registers.side_effect = read_side_effect
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -1237,7 +1230,7 @@ async def test_battery_init_device_success(mock_hub, mock_modbus_client) -> None
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -1271,7 +1264,7 @@ async def test_battery_init_device_invalid_rating(mock_hub, mock_modbus_client) 
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -1311,7 +1304,7 @@ async def test_battery_read_modbus_data_success(mock_hub, mock_modbus_client) ->
     mock_client.read_holding_registers.side_effect = read_side_effect
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()

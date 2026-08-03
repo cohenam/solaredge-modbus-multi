@@ -235,8 +235,9 @@ async def test_transport_write_is_atomic_function_16(make_server) -> None:
     )
     try:
         await transport.connect()
-        result = await transport.write_registers_raw(1, 57348, [1, 17274, 17530])
-        assert not result.isError()
+        # Success is the absence of a raise now: write_registers_raw returns
+        # nothing and reports every failure through our exception hierarchy.
+        await transport.write_registers_raw(1, 57348, [1, 17274, 17530])
     finally:
         await transport.disconnect(clear_client=True)
         await server.stop()

@@ -160,7 +160,7 @@ async def test_write_refused_never_reaches_transport(
     mock_client = mock_modbus_client.return_value
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -183,7 +183,7 @@ async def test_refused_write_does_not_disturb_poll_state(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -207,12 +207,9 @@ async def test_write_allowed_when_enabled(
         hass, mock_config_entry_data, mock_config_entry_options, allow_writes=True
     )
     mock_client = mock_modbus_client.return_value
-    success = MagicMock()
-    success.isError.return_value = False
-    mock_client.write_registers.return_value = success
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()

@@ -82,7 +82,7 @@ async def test_form_user_with_valid_input(
 
     with (
         patch(
-            "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+            "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
             mock_modbus_client,
         ),
         _mock_device_scanner(inverters=[1]),

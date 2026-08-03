@@ -809,7 +809,7 @@ async def test_diagnostics_polling_section(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()

@@ -22,6 +22,7 @@ from custom_components.solaredge_modbus_multi.hub import (
 from tests.conftest import (
     create_exception_response,
     create_modbus_response,
+    install_connection_double,
     registers_from_values,
 )
 
@@ -104,7 +105,7 @@ async def test_apc_uint32_fields_decode_as_integers(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -146,7 +147,7 @@ async def test_apc_illegal_function_disables_feature(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -173,7 +174,7 @@ async def test_evse_init_failure_raises_hub_init_failed(mock_hub) -> None:
         mock_evse_cls.return_value.init_device = AsyncMock(
             side_effect=ModbusReadError("no response")
         )
-        mock_hub._client = MagicMock()
+        install_connection_double(mock_hub._transport)
 
         with pytest.raises(HubInitFailed):
             await mock_hub._async_init_solaredge()
@@ -192,7 +193,7 @@ async def test_write_error_raises_before_sleeping(mock_hub, mock_modbus_client) 
 
     with (
         patch(
-            "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+            "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
             mock_modbus_client,
         ),
         patch(
@@ -279,7 +280,7 @@ async def test_evse_invalid_device_is_skipped(mock_hub) -> None:
         mock_evse_cls.return_value.init_device = AsyncMock(
             side_effect=DeviceInvalid("ID 1 is not SunSpec.")
         )
-        mock_hub._client = MagicMock()
+        install_connection_double(mock_hub._transport)
 
         await mock_hub._async_init_solaredge()
 

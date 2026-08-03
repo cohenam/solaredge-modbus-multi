@@ -4,26 +4,55 @@ One ModbusTransport = one serialized Modbus/TCP session (SolarEdge
 inverters accept a single session; the server closes it after ~2 minutes
 idle and the next call reconnects reactively — no keepalive on purpose).
 
-The transport owns the pymodbus client lifecycle, the session lock with
-task-reentrancy, the pymodbus 3.7 slave=/device_id= keyword shim, and raw
-read/write calls plus PollStats counters. Response validation, exception
-mapping and retry policy stay with the callers: pymodbus transaction
-retries apply only where the caller's enclosing deadline allows them
-(core data reads inside the whole-poll budget); the 2 s detection-probe
-deadlines intentionally pre-empt them, and whole-poll retries belong to
-the coordinator. Do not enlarge deadlines here to "honor" inner retries —
-the 5 s fast-poll envelope depends on fast failure.
+The link itself is `modbus-connection`, which connects on demand and
+drops its client when the socket goes away. What stays here is
+everything that library has no equivalent for:
+
+* the session lock with task reentrancy, so one device's whole read cycle
+  is uninterrupted — SolarEdge firmware answers with the wrong unit id
+  when requests interleave;
+* connection *generations*: the library's close() is permanent, so
+  recovering from a wedged socket means building a new connection rather
+  than reopening one, and a dead generation's callbacks must not touch
+  live state;
+* PollStats counters for diagnostics.
+
+Error policy: a per-request timeout is mapped to ModbusIOError, NOT left
+as a TimeoutError. TimeoutError reaching the hub means the whole-poll
+deadline expired, which trips the coordinator's retry limit; a single
+dropped frame must not be mistaken for that. Retry policy stays with the
+callers — the library issues each request once, and the enclosing
+deadlines (2 s detection probes, the whole-poll budget) are what bound
+it. Do not enlarge deadlines here: the fast-poll envelope depends on
+fast failure.
 """
 
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from pymodbus.client import AsyncModbusTcpClient
+from modbus_connection import ModbusTcpParams
+from modbus_connection.exceptions import (
+    ModbusConnectionError,
+    ModbusError,
+    ModbusExceptionError,
+    ModbusProtocolError,
+    ModbusTimeoutError,
+)
+from modbus_connection.pymodbus import ModbusConnection
+
+from .const import ModbusExceptions
+from .exceptions import (
+    ModbusIllegalAddress,
+    ModbusIllegalFunction,
+    ModbusIllegalValue,
+    ModbusIOError,
+    ModbusReadError,
+    ModbusWriteError,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +65,27 @@ class PollStats:
     writes: int = 0
     connects: int = 0
     reconnects: int = 0
+    recycles: int = 0
+    connection_losses: int = 0
     last_error: str | None = field(default=None, repr=False)
+
+
+class ModbusReadResult:
+    """Wrap a register list so callers keep the `.registers` interface."""
+
+    __slots__ = ("registers",)
+
+    def __init__(self, registers: list[int]) -> None:
+        self.registers = registers
+
+
+def _illegal_for(code: int | None):
+    """Map a Modbus exception code to our exception type, if it is one."""
+    return {
+        ModbusExceptions.IllegalAddress: ModbusIllegalAddress,
+        ModbusExceptions.IllegalFunction: ModbusIllegalFunction,
+        ModbusExceptions.IllegalValue: ModbusIllegalValue,
+    }.get(code)
 
 
 class ModbusTransport:
@@ -48,21 +97,24 @@ class ModbusTransport:
         port: int,
         *,
         timeout: int,
-        retries: int,
-        reconnect_delay: float,
-        reconnect_delay_max: float,
-        client_factory: Callable[..., AsyncModbusTcpClient] | None = None,
+        retries: int = 0,
+        reconnect_delay: float = 0,
+        reconnect_delay_max: float = 0,
+        connection_factory: Callable[..., ModbusConnection] | None = None,
     ) -> None:
         self._host = host
         self._port = port
         self._timeout = timeout
+        # Accepted for call-site compatibility. modbus-connection issues each
+        # request once and reconnects on demand, so these are no longer ours
+        # to set; the enclosing deadlines already pre-empted pymodbus retries.
         self._retries = retries
         self._reconnect_delay = reconnect_delay
         self._reconnect_delay_max = reconnect_delay_max
-        self._client_factory = client_factory
+        self._connection_factory = connection_factory
 
-        self._client: AsyncModbusTcpClient | None = None
-        self._use_device_id_param = False
+        self._connection: ModbusConnection | None = None
+        self._generation = 0
         self._lock = asyncio.Lock()
         self._lock_holder: asyncio.Task | None = None
         self.stats = PollStats()
@@ -77,74 +129,119 @@ class ModbusTransport:
 
     @property
     def connected(self) -> bool:
-        if self._client is None:
+        if self._connection is None:
             return False
 
-        return self._client.connected
+        return self._connection.connected
 
     def _held_by_current_task(self) -> bool:
         return self._lock_holder is asyncio.current_task()
 
-    async def _connect_unlocked(self) -> None:
-        if self.connected:
+    # -- connection generations -------------------------------------------
+
+    def _build_connection(self) -> ModbusConnection:
+        _LOGGER.debug(
+            f"New ModbusConnection generation {self._generation} "
+            f"for {self._host}:{self._port} timeout={self._timeout}"
+        )
+        if self._connection_factory is not None:
+            connection = self._connection_factory(
+                host=self._host, port=self._port, timeout=self._timeout
+            )
+        else:
+            connection = ModbusConnection(
+                ModbusTcpParams(host=self._host, port=self._port),
+                timeout=self._timeout,
+            )
+
+        # Bind the callback to this generation: a dead connection dropping
+        # its socket must not touch counters that now belong to a live one.
+        generation = self._generation
+        connection.on_connection_lost(lambda: self._note_connection_lost(generation))
+        self.stats.connects += 1
+        return connection
+
+    def _note_connection_lost(self, generation: int) -> None:
+        if generation != self._generation:
             return
 
-        if self._client is None:
-            _LOGGER.debug(
-                "New AsyncModbusTcpClient: "
-                f"reconnect_delay={self._reconnect_delay} "
-                f"reconnect_delay_max={self._reconnect_delay_max} "
-                f"timeout={self._timeout} "
-                f"retries={self._retries}"
-            )
-            factory = self._client_factory or AsyncModbusTcpClient
-            self._client = factory(
-                host=self._host,
-                port=self._port,
-                reconnect_delay=self._reconnect_delay,
-                reconnect_delay_max=self._reconnect_delay_max,
-                timeout=self._timeout,
-                retries=self._retries,
-            )
-            # pymodbus 3.7 renamed slave= to device_id=; cache the check once.
-            sig = inspect.signature(self._client.read_holding_registers)
-            self._use_device_id_param = "device_id" in sig.parameters
-            self.stats.connects += 1
-        elif not self._client.connected:
+        self.stats.connection_losses += 1
+        _LOGGER.debug(f"Connection lost to {self._host}:{self._port}")
+
+    def _current(self) -> ModbusConnection:
+        if self._connection is None:
+            self._connection = self._build_connection()
+        elif not self._connection.connected:
             self.stats.reconnects += 1
 
-        _LOGGER.debug(f"Connecting to {self._host}:{self._port} ...")
-        await self._client.connect()
+        return self._connection
+
+    async def _recycle_unlocked(self) -> None:
+        """Retire this connection generation and build a fresh one on next use.
+
+        The library's close() is permanent (it marks the connection closed
+        for good), so a wedged socket cannot be reopened — only replaced.
+        """
+        connection, self._connection = self._connection, None
+        self._generation += 1
+        if connection is None:
+            return
+
+        self.stats.recycles += 1
+        _LOGGER.debug(f"Recycling connection to {self._host}:{self._port}")
+        try:
+            await connection.close()
+        except (ModbusError, OSError) as e:  # closing must not mask the cause
+            _LOGGER.debug(f"Error closing retired connection: {e}")
+
+    async def recycle(self) -> None:
+        """Replace the connection, taking the lock unless already held."""
+        if self._held_by_current_task():
+            await self._recycle_unlocked()
+            return
+        async with self._lock:
+            await self._recycle_unlocked()
 
     async def connect(self) -> None:
-        """Connect, creating the client on first use."""
+        """Establish the link, building a connection on first use."""
         if self._held_by_current_task():
             await self._connect_unlocked()
             return
         async with self._lock:
             await self._connect_unlocked()
 
-    def _disconnect_unlocked(self, clear_client: bool = False) -> None:
-        if self._client is not None:
-            _LOGGER.debug(
-                f"Disconnecting from {self._host}:{self._port} "
-                f"(clear_client={clear_client})."
-            )
-            self._client.close()
+    async def _connect_unlocked(self) -> None:
+        connection = self._current()
+        if connection.connected:
+            return
 
-            if clear_client:
-                self._client = None
+        _LOGGER.debug(f"Connecting to {self._host}:{self._port} ...")
+        try:
+            await connection.connect()
+        except (ModbusConnectionError, ModbusTimeoutError) as e:
+            self.stats.last_error = f"connect: {type(e).__name__}"
+            await self._recycle_unlocked()
+            raise ModbusIOError(f"Connect to {self._host}:{self._port} failed: {e}")
 
     async def disconnect(self, clear_client: bool = False) -> None:
-        """Close the socket; optionally drop the client object."""
+        """Close the session.
+
+        Every close is a recycle now: the library cannot reopen a closed
+        connection, so `clear_client` no longer distinguishes anything. It
+        is kept so call sites read unchanged.
+        """
         if self._held_by_current_task():
-            self._disconnect_unlocked(clear_client)
+            await self._recycle_unlocked()
             return
         async with self._lock:
-            self._disconnect_unlocked(clear_client)
+            await self._recycle_unlocked()
 
-    async def read_holding_registers_raw(self, unit: int, address: int, count: int):
-        """Raw locked read; returns the pymodbus response unvalidated."""
+    # -- register i/o ------------------------------------------------------
+
+    async def read_holding_registers_raw(
+        self, unit: int, address: int, count: int
+    ) -> ModbusReadResult:
+        """Locked read; raises our exception types, never the library's."""
         if self._held_by_current_task():
             return await self._read_unlocked(unit, address, count)
 
@@ -155,33 +252,87 @@ class ModbusTransport:
             finally:
                 self._lock_holder = None
 
-    async def _read_unlocked(self, unit: int, address: int, count: int):
+    async def _read_unlocked(
+        self, unit: int, address: int, count: int
+    ) -> ModbusReadResult:
+        connection = self._current()
         self.stats.reads += 1
-        if self._use_device_id_param:
-            return await self._client.read_holding_registers(
-                address=address, count=count, device_id=unit
+        try:
+            registers = await connection.for_unit(unit).read_holding_registers(
+                address, count
             )
-        return await self._client.read_holding_registers(
-            address=address, count=count, slave=unit
-        )
+
+        except ModbusExceptionError as e:
+            # The device answered, just not with data. Sanitized: type and
+            # code only, never payload or host.
+            self.stats.last_error = (
+                f"read unit {unit}: ExceptionResponse(code={e.exception_code})"
+            )
+            illegal = _illegal_for(e.exception_code)
+            if illegal is not None:
+                raise illegal(e)
+            raise ModbusReadError(e)
+
+        except (ModbusTimeoutError, ModbusConnectionError, ModbusProtocolError) as e:
+            # No usable answer: the socket may be half-open or desynchronised,
+            # so the generation is retired rather than reused. Deliberately
+            # ModbusIOError and not TimeoutError — see the module docstring.
+            self.stats.last_error = f"read unit {unit}: {type(e).__name__}"
+            await self._recycle_unlocked()
+            raise ModbusIOError(e)
+
+        except ModbusError as e:
+            # A malformed or unrecognised answer, not an exception PDU. Treat
+            # it as a transport failure so callers can retry — only a real
+            # exception PDU is evidence that a device is there and answering,
+            # which is what the ID scanner keys its classification on.
+            self.stats.last_error = f"read unit {unit}: {type(e).__name__}"
+            await self._recycle_unlocked()
+            raise ModbusIOError(e)
+
+        return ModbusReadResult(registers)
 
     async def write_registers_raw(self, unit: int, address: int, payload: list[int]):
-        """Raw locked write (function 16); returns the response unvalidated.
+        """Locked write (function 16); raises our exception types.
 
-        Connects first if the session dropped — SolarEdge idle-closes after
-        ~2 minutes, and a write must not fail just because polling is slow.
+        A lost response is reported as an unknown outcome and never retried:
+        the write may well have been applied, and these are power-control
+        registers.
         """
         async with self._lock:
-            await self._connect_unlocked()
-
             self.stats.writes += 1
-            if self._use_device_id_param:
-                return await self._client.write_registers(
-                    address=address, values=payload, device_id=unit
+            connection = self._current()
+            try:
+                await connection.for_unit(unit).write_registers(address, payload)
+
+            except ModbusExceptionError as e:
+                self.stats.last_error = (
+                    f"write unit {unit}: ExceptionResponse(code={e.exception_code})"
                 )
-            return await self._client.write_registers(
-                address=address, values=payload, slave=unit
-            )
+                illegal = _illegal_for(e.exception_code)
+                if illegal is not None:
+                    raise illegal(e)
+                raise ModbusWriteError(e)
+
+            except (
+                ModbusTimeoutError,
+                ModbusConnectionError,
+                ModbusProtocolError,
+            ) as e:
+                self.stats.last_error = f"write unit {unit}: {type(e).__name__}"
+                await self._recycle_unlocked()
+                raise ModbusIOError(
+                    f"No response to write at {address} on unit {unit}; "
+                    f"the write may or may not have been applied: {e}"
+                )
+
+            except ModbusError as e:
+                self.stats.last_error = f"write unit {unit}: {type(e).__name__}"
+                raise ModbusWriteError(e)
+
+    def set_unit_spacing(self, unit: int, seconds: float) -> None:
+        """Set (or clear, with 0) a minimum gap between one unit's requests."""
+        self._current().for_unit(unit).set_message_spacing(seconds)
 
     def hold_session(self) -> _SessionHold:
         """Reserve the session for a batch of calls by the current task.

@@ -27,7 +27,6 @@ from modbus_connection.decode import (
     decode_uint32,
     decode_uint64,
 )
-from pymodbus.exceptions import ModbusIOException
 
 from .const import (
     BATTERY_REG_BASE,
@@ -667,7 +666,7 @@ class SolarEdgeInverter:
                     f"I{self.inverter_unit_id}: global power control NOT available"
                 )
 
-            except (TimeoutError, ModbusIOException):
+            except (TimeoutError, ModbusIOError):
                 # Handled here, so the refresh still completes — but the
                 # settings data is stale, so the poll must not count as a
                 # served re-read.
@@ -688,11 +687,6 @@ class SolarEdgeInverter:
                     f"I{self.inverter_unit_id}: The inverter did not respond while "
                     "reading data for Global Dynamic Power Controls. These entities "
                     "will be unavailable."
-                )
-
-            except ModbusIOError:
-                raise ModbusReadError(
-                    f"No response from inverter ID {self.inverter_unit_id}"
                 )
 
             finally:
@@ -835,7 +829,7 @@ class SolarEdgeInverter:
                     f"I{self.inverter_unit_id}: advanced power control NOT available"
                 )
 
-            except (TimeoutError, ModbusIOException):
+            except (TimeoutError, ModbusIOError):
                 # Handled here, so the refresh still completes — but the
                 # settings data is stale, so the poll must not count as a
                 # served re-read.
@@ -856,11 +850,6 @@ class SolarEdgeInverter:
                     f"I{self.inverter_unit_id}: The inverter did not respond while "
                     "reading data for Advanced Power Controls. These entities "
                     "will be unavailable."
-                )
-
-            except ModbusIOError:
-                raise ModbusReadError(
-                    f"No response from inverter ID {self.inverter_unit_id}"
                 )
 
             finally:
@@ -959,17 +948,12 @@ class SolarEdgeInverter:
                 drop_decoded(self.decoded_model, GRID_STATUS_DECODED_KEYS)
                 _LOGGER.debug(f"I{self.inverter_unit_id}: Grid On/Off NOT available")
 
-            except ModbusIOException as e:
+            except ModbusIOError as e:
                 drop_decoded(self.decoded_model, GRID_STATUS_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: A modbus I/O exception occurred "
                     "while reading data for Grid On/Off Status. This entity "
                     f"will be unavailable: {e}"
-                )
-
-            except ModbusIOError:
-                raise ModbusReadError(
-                    f"No response from inverter ID {self.inverter_unit_id}"
                 )
 
             finally:
@@ -1186,10 +1170,6 @@ class SolarEdgeMeter:
                 address=self.start_address,
                 rcount=67,
             )
-            if meter_info.isError():
-                _LOGGER.debug(meter_info)
-                raise ModbusReadError(meter_info)
-
             # Standard SunSpec common model, starting directly at C_SunSpec_DID
             # (meters have no C_SunSpec_ID header).
             self.decoded_common = decode_sunspec_common_block(meter_info.registers)

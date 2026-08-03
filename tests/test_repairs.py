@@ -623,12 +623,14 @@ class TestIssueScoping:
         hub_b = make_hub("entry_b", "192.168.1.101")
 
         client = mock_modbus_client.return_value
+        # connect() returns, but the link never comes up.
+        client.connect = AsyncMock()
         client.connected = False
 
         registry = ir.async_get(hass)
 
         with patch(
-            "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+            "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
             mock_modbus_client,
         ):
             for hub in (hub_a, hub_b):
@@ -694,7 +696,7 @@ class TestIssueScoping:
         issue_id = detect_timeout_issue_id("gpc", "entry_gpc", 1)
 
         with patch(
-            "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+            "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
             mock_modbus_client,
         ):
             await hub.connect()

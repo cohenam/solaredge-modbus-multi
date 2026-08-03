@@ -19,6 +19,7 @@ from custom_components.solaredge_modbus_multi import (
 )
 from custom_components.solaredge_modbus_multi.const import DOMAIN
 from custom_components.solaredge_modbus_multi.hub import HubInitFailed
+from tests.conftest import connection_double
 
 
 @pytest.fixture(autouse=True)
@@ -150,7 +151,7 @@ async def test_async_setup_entry_success(
     mock_client.read_holding_registers = AsyncMock(side_effect=mock_read)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         # Use hass.config_entries.async_setup for proper state management
@@ -171,8 +172,9 @@ async def test_async_setup_entry_connection_failed(
     hass.data[DOMAIN]["yaml"] = {}
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient"
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection"
     ) as mock_client:
+        mock_client.return_value = connection_double()
         mock_instance = mock_client.return_value
         mock_instance.connect = AsyncMock(side_effect=ConnectionError("Failed"))
         mock_instance.connected = False
@@ -214,7 +216,7 @@ async def test_async_unload_entry(
     mock_client.read_holding_registers = AsyncMock(side_effect=mock_read)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         # Setup the entry using proper state management
@@ -256,8 +258,9 @@ async def test_async_setup_entry_hub_init_failed(
     hass.data[DOMAIN]["yaml"] = {}
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient"
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection"
     ) as mock_client:
+        mock_client.return_value = connection_double()
         mock_instance = mock_client.return_value
         mock_instance.connect = AsyncMock(side_effect=HubInitFailed("Hub init error"))
         mock_instance.connected = False
@@ -287,7 +290,7 @@ async def test_async_setup_entry_data_update_failed(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         with pytest.raises(ConfigEntryNotReady):
@@ -306,8 +309,9 @@ async def test_setup_entry_failure_calls_shutdown(
     hass.data[DOMAIN]["yaml"] = {}
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient"
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection"
     ) as mock_client:
+        mock_client.return_value = connection_double()
         mock_instance = mock_client.return_value
         mock_instance.connect = AsyncMock(side_effect=HubInitFailed("Hub init error"))
         mock_instance.connected = False
@@ -518,7 +522,7 @@ async def test_setup_entry_registers_no_update_listener(
     mock_client.read_holding_registers = AsyncMock(side_effect=mock_read)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -564,7 +568,7 @@ async def test_async_remove_config_entry_device_in_use(
     mock_client.read_holding_registers = AsyncMock(side_effect=mock_read)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         # Setup the entry using proper state management
@@ -626,7 +630,7 @@ async def test_async_remove_config_entry_device_not_in_use(
     mock_client.read_holding_registers = AsyncMock(side_effect=mock_read)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         # Setup the entry using proper state management
@@ -680,7 +684,7 @@ async def test_coordinator_update_with_pending_writes(
     mock_client.read_holding_registers = AsyncMock(side_effect=mock_read)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         # Setup the entry using proper state management
@@ -761,7 +765,7 @@ async def test_coordinator_retry_logic_success_on_retry(
     mock_client.read_holding_registers = AsyncMock(side_effect=mock_read)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         # Setup the entry using proper state management
@@ -797,7 +801,7 @@ async def test_coordinator_retry_logic_exhausted(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         # Setup should fail after retries exhausted
@@ -840,7 +844,7 @@ async def test_coordinator_update_raises_update_failed_on_hub_init_failed(
     mock_client.read_holding_registers = AsyncMock(side_effect=mock_read)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         # Setup the entry using proper state management
@@ -893,7 +897,7 @@ async def test_coordinator_update_raises_update_failed_on_data_update_failed(
     mock_client.read_holding_registers = AsyncMock(side_effect=mock_read)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         # Setup the entry using proper config entry lifecycle
@@ -941,7 +945,7 @@ async def test_setup_entry_platform_failure_shuts_hub_down(
     mock_client.read_holding_registers = AsyncMock(side_effect=mock_read)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         with (

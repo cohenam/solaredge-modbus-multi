@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from functools import partial
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
+from modbus_connection.exceptions import ModbusExceptionError, ModbusTimeoutError
 
 from custom_components.solaredge_modbus_multi.const import ConfName
 
@@ -45,19 +47,86 @@ def mock_config_entry_options() -> dict[str, Any]:
     }
 
 
+async def _call_unit_method(connection: MagicMock, name: str, *args, **kwargs):
+    """Forward a per-unit call to the connection-level recorder.
+
+    The recorder is looked up per call, so a test may swap it out after the
+    unit handle exists. modbus-connection reports every failure by raising,
+    but a mock can only hand one back — through `return_value` or a
+    `side_effect` function's return. Anything exception-shaped coming back
+    is therefore re-raised here, which is what makes the response helpers
+    below work either way.
+    """
+    result = await getattr(connection, name)(*args, **kwargs)
+    if isinstance(result, BaseException):
+        raise result
+    return result
+
+
+def connection_double() -> MagicMock:
+    """Build a stand-in for modbus_connection's ModbusConnection.
+
+    Register traffic is configured on the connection itself
+    (`client.read_holding_registers.side_effect = ...`), while the transport
+    reaches it through `for_unit(unit)`. Every unit handle forwards to the
+    same recorders, so one side_effect still sees the whole session and
+    `assert_called_once()` still counts every unit's calls.
+    """
+    connection = MagicMock()
+    # A fresh ModbusConnection has no client yet, and its close() is
+    # permanent; the transport's connect/reconnect accounting keys off this.
+    connection.connected = False
+
+    def _connected(value: bool) -> None:
+        connection.connected = value
+
+    connection.connect = AsyncMock(side_effect=lambda: _connected(True))
+    connection.close = AsyncMock(side_effect=lambda: _connected(False))
+    connection.on_connection_lost = MagicMock()
+    connection.read_holding_registers = AsyncMock()
+    connection.write_registers = AsyncMock()
+    connection.set_message_spacing = MagicMock()
+
+    handles: dict[int, MagicMock] = {}
+
+    def for_unit(unit_id: int) -> MagicMock:
+        if unit_id not in handles:
+            handle = MagicMock()
+            handle.unit_id = unit_id
+            handle.read_holding_registers = partial(
+                _call_unit_method, connection, "read_holding_registers"
+            )
+            handle.write_registers = partial(
+                _call_unit_method, connection, "write_registers"
+            )
+            handle.set_message_spacing = connection.set_message_spacing
+            handles[unit_id] = handle
+        return handles[unit_id]
+
+    connection.for_unit.side_effect = for_unit
+    return connection
+
+
+def install_connection_double(transport) -> MagicMock:
+    """Point a transport at doubles, including the ones it rebuilds.
+
+    Every close is a recycle now, so a test that keeps polling across a
+    failure needs the next generation to be a double too — otherwise the
+    transport builds a real ModbusConnection and opens a socket.
+    """
+    transport._connection_factory = lambda **kwargs: connection_double()
+    transport._connection = connection_double()
+    transport._connection.connected = True
+    return transport._connection
+
+
 @pytest.fixture
 def mock_modbus_client() -> Generator[MagicMock, None, None]:
-    """Return a mock AsyncModbusTcpClient."""
+    """Patch the transport's ModbusConnection with a connection double."""
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient"
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection"
     ) as mock_client:
-        client_instance = MagicMock()
-        client_instance.connect = AsyncMock()
-        client_instance.close = MagicMock()
-        client_instance.connected = True
-        client_instance.read_holding_registers = AsyncMock()
-        client_instance.write_registers = AsyncMock()
-        mock_client.return_value = client_instance
+        mock_client.return_value = connection_double()
         yield mock_client
 
 
@@ -159,35 +228,19 @@ def mock_inverter_model_registers() -> list[int]:
     ]
 
 
-def create_modbus_response(registers: list[int]) -> MagicMock:
-    """Create a mock Modbus response."""
-    response = MagicMock()
-    response.isError.return_value = False
-    response.registers = registers
-    return response
+def create_modbus_response(registers: list[int]) -> list[int]:
+    """Create a successful read result: modbus-connection yields registers."""
+    return list(registers)
 
 
-def create_exception_response(exception_code: int):
-    """Create a mock ExceptionResponse with proper type."""
-
-    try:
-        from pymodbus.pdu.pdu import ExceptionResponse
-    except ImportError:
-        from pymodbus.pdu import ExceptionResponse
-
-    # Create actual exception instance
-    response = ExceptionResponse(0x01, exception_code)
-    response.isError = MagicMock(return_value=True)
-    return response
+def create_exception_response(exception_code: int) -> ModbusExceptionError:
+    """Create the failure a device's exception PDU raises."""
+    return ModbusExceptionError(exception_code)
 
 
-def create_io_exception_response():
-    """Create a mock ModbusIOException response with proper type."""
-    from pymodbus.exceptions import ModbusIOException
-
-    response = ModbusIOException("Test IO Exception")
-    response.isError = MagicMock(return_value=True)
-    return response
+def create_io_exception_response() -> ModbusTimeoutError:
+    """Create the failure an unanswered request raises."""
+    return ModbusTimeoutError("Test IO Exception")
 
 
 def registers_from_values(*typed_values, word_order: str = "little") -> list[int]:

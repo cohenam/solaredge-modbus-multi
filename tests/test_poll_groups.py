@@ -40,7 +40,11 @@ from custom_components.solaredge_modbus_multi.sensor import (
 from custom_components.solaredge_modbus_multi.sensor import (
     async_setup_entry as sensor_setup_entry,
 )
-from tests.conftest import create_exception_response, create_modbus_response
+from tests.conftest import (
+    create_exception_response,
+    create_modbus_response,
+    install_connection_double,
+)
 from tests.test_decode_golden import build_synergy_full_space, make_side_effect
 
 # Groups this file never re-times, so they are due on every cycle.
@@ -88,8 +92,7 @@ def _ready_to_cycle(hub: SolarEdgeModbusMultiHub) -> SolarEdgeModbusMultiHub:
     """Let a refresh run its cycle bookkeeping without touching modbus."""
     hub.initalized = True
     hub._keep_modbus_open = True
-    hub._client = MagicMock()
-    hub._client.connected = True
+    install_connection_double(hub._transport)
     return hub
 
 
@@ -288,7 +291,7 @@ async def test_write_forces_settings_group_on_next_refresh(
     mock_client.write_registers.return_value = create_modbus_response([])
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -360,7 +363,7 @@ async def test_off_cycle_group_keeps_values_and_entity_available(
     mock_client.read_holding_registers.side_effect = make_side_effect(space, {}, calls)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -493,7 +496,7 @@ async def test_last_served_cycle_tracks_physical_reads(
     mock_client.read_holding_registers.side_effect = make_side_effect(space, {}, calls)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -546,7 +549,7 @@ async def test_detect_timeout_falls_back_to_settings_cadence(
     mock_client.read_holding_registers.side_effect = side_effect
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -596,7 +599,7 @@ async def test_detect_illegal_response_disables_block_permanently(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -656,7 +659,7 @@ async def test_startup_probe_timeout_still_creates_entities(
     mock_client.read_holding_registers.side_effect = side_effect
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -714,7 +717,7 @@ async def test_settings_timeout_does_not_consume_forced_poll(
     mock_client.read_holding_registers.side_effect = side_effect
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -762,7 +765,7 @@ async def test_settings_timeout_defers_uncommitted_warning(
     mock_client.read_holding_registers.side_effect = side_effect
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -809,7 +812,7 @@ async def test_ext_prod_max_alone_counts_as_a_settings_read(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()

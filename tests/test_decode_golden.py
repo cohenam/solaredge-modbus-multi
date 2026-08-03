@@ -340,7 +340,7 @@ async def _run_scenario(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -449,7 +449,7 @@ async def test_transaction_counts_per_cycle(
     client.read_holding_registers.side_effect = make_side_effect(space, {}, calls)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -521,7 +521,7 @@ async def test_transaction_counts_with_poll_groups(
     client.read_holding_registers.side_effect = make_side_effect(space, {}, calls)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -583,7 +583,7 @@ async def test_poll_group_defaults_reproduce_untiered_reads(
     client.read_holding_registers.side_effect = make_side_effect(space, {}, calls)
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
