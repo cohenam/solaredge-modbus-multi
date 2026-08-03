@@ -970,6 +970,9 @@ class SolarEdgeInverter:
                 inverter_data = await self.hub.modbus_read_holding_registers(
                     unit=self.inverter_unit_id, address=57362, rcount=2
                 )
+                # Its own try block: this can succeed on an inverter that
+                # rejected the site-limit read above.
+                self.hub.note_group_read(PollGroup.SETTINGS)
 
                 self.decoded_model.update(
                     {

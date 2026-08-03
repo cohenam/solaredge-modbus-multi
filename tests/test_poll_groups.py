@@ -782,3 +782,44 @@ async def test_settings_timeout_defers_uncommitted_warning(
         timing_out = False
         await hub.async_refresh_modbus_data()
         assert "written without" in caplog.text
+
+
+async def test_ext_prod_max_alone_counts_as_a_settings_read(
+    make_hub, mock_modbus_client
+) -> None:
+    """A settings block can succeed even where its neighbour is unsupported.
+
+    Site limit (57344) and external production max (57362) sit in separate
+    try blocks, so an inverter that rejects the first can still answer the
+    second — and that transaction is real cadence evidence.
+    """
+    hub = make_hub()
+    space = build_synergy_full_space()
+    calls: list[tuple[int, int]] = []
+    mock_client = mock_modbus_client.return_value
+    mock_client.read_holding_registers.side_effect = make_side_effect(
+        space,
+        {
+            61440: create_exception_response(ModbusExceptions.IllegalAddress),
+            61696: create_exception_response(ModbusExceptions.IllegalAddress),
+            57344: create_exception_response(ModbusExceptions.IllegalAddress),
+            57348: create_exception_response(ModbusExceptions.IllegalAddress),
+        },
+        calls,
+    )
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        mock_modbus_client,
+    ):
+        await hub.connect()
+        inverter = SolarEdgeInverter(device_id=1, hub=hub)
+        await inverter.init_device()
+        hub.inverters = [inverter]
+        hub.initalized = True
+
+        await hub.async_refresh_modbus_data()
+
+    assert inverter.site_limit_control is False
+    assert 57362 in _addresses(calls)
+    assert hub.poll_groups["settings"]["last_served_cycle"] == 0
