@@ -72,6 +72,7 @@
           "detect_meters": "Auto-Detect Meters",
           "detect_batteries": "Auto-Detect Batteries",
           "detect_extras": "Auto-Detect Additional Entities",
+          "allow_hardware_writes": "Allow Hardware Writes (Modbus write commands)",
           "advanced_power_control": "Power Control Options",
           "sleep_after_write": "Inverter Command Delay (seconds)",
           "slow_poll_multiplier": "Poll settings registers every Nth cycle"

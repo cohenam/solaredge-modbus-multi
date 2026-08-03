@@ -161,6 +161,7 @@ def mock_hub():
     """Create a mock SolarEdgeModbusMultiHub."""
     hub = MagicMock()
     hub.pymodbus_version = "3.8.3"
+    hub.option_allow_hardware_writes = False
     hub.inverters = []
     hub.meters = []
     hub.batteries = []
@@ -287,6 +288,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Check basic structure
         assert "pymodbus_version" in result
         assert result["pymodbus_version"] == "3.8.3"
+        assert result["hardware_writes_enabled"] is False
         assert "config_entry" in result
         assert "yaml" in result
 

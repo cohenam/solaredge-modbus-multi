@@ -44,6 +44,7 @@
           "detect_meters": "Detectar medidores automáticamente",
           "detect_batteries": "Detectar baterías automáticamente",
           "detect_extras": "Detectar entidades adicionales automáticamente",
+          "allow_hardware_writes": "Permitir escrituras en el hardware (comandos de escritura Modbus)",
           "advanced_power_control": "Opciones de control de energía",
           "sleep_after_write": "Retraso de comando del inversor (segundos)"
         }

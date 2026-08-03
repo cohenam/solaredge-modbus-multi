@@ -72,6 +72,7 @@
           "detect_meters": "Automatycznie wykryj liczniki",
           "detect_batteries": "Automatycznie wykryj baterie",
           "detect_extras": "Automatycznie wykrywaj dodatkowe elementy",
+          "allow_hardware_writes": "Zezwól na zapis do sprzętu (polecenia zapisu Modbus)",
           "advanced_power_control": "Opcje kontroli mocy",
           "sleep_after_write": "Opóźnienie polecenia falownika (sekundy)"
         }

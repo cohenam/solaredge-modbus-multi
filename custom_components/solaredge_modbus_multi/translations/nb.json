@@ -72,6 +72,7 @@
           "detect_meters": "Automatisk oppdagelse av målere",
           "detect_batteries": "Automatisk gjenkjenning av batterier",
           "detect_extras": "Automatisk oppdage flere enheter",
+          "allow_hardware_writes": "Tillat maskinvareskriving (Modbus-skrivekommandoer)",
           "advanced_power_control": "Strømkontrollalternativer",
           "sleep_after_write": "Inverter Command Delay (sekunder)"
         }

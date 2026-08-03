@@ -27,7 +27,11 @@ async def async_setup_entry(
     entities = []
 
     for inverter in hub.inverters:
+        # Refresh only re-reads; it is the one button that never writes.
         entities.append(SolarEdgeRefreshButton(inverter, config_entry, coordinator))
+
+        if not hub.option_allow_hardware_writes:
+            continue
 
         """ Power Control Block """
         if hub.option_detect_extras and inverter.advanced_power_control:

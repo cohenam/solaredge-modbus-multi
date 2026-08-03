@@ -72,6 +72,7 @@
           "detect_meters": "Misuratori di rilevamento automatico",
           "detect_batteries": "Rilevamento automatico delle batterie",
           "detect_extras": "Rileva automaticamente entità aggiuntive",
+          "allow_hardware_writes": "Consenti scritture hardware (comandi di scrittura Modbus)",
           "advanced_power_control": "Opzioni di controllo della potenza",
           "sleep_after_write": "Ritardo comando inverter (secondi)"
         }

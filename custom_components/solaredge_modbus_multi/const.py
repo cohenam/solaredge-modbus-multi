@@ -140,6 +140,9 @@ class ConfDefaultFlag(IntEnum):
     ADV_STORAGE_CONTROL = 0
     ADV_SITE_LIMIT_CONTROL = 0
     ALLOW_BATTERY_ENERGY_RESET = 0
+    # Hardware writes are opt-in: with this off no write-capable entity is
+    # created and the hub refuses writes outright.
+    ALLOW_HARDWARE_WRITES = 0
 
 
 class ConfDefaultStr(StrEnum):
@@ -158,6 +161,7 @@ class ConfName(StrEnum):
     ADV_STORAGE_CONTROL = "adv_storage_control"
     ADV_SITE_LIMIT_CONTROL = "adv_site_limit_control"
     ALLOW_BATTERY_ENERGY_RESET = "allow_battery_energy_reset"
+    ALLOW_HARDWARE_WRITES = "allow_hardware_writes"
     SLEEP_AFTER_WRITE = "sleep_after_write"
     BATTERY_RATING_ADJUST = "battery_rating_adjust"
     BATTERY_ENERGY_RESET_CYCLES = "battery_energy_reset_cycles"

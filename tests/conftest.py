@@ -35,6 +35,10 @@ def mock_config_entry_options() -> dict[str, Any]:
         ConfName.ADV_STORAGE_CONTROL: False,
         ConfName.ADV_SITE_LIMIT_CONTROL: False,
         ConfName.ALLOW_BATTERY_ENERGY_RESET: False,
+        # Writes are off by default in production; the suite opts in so it can
+        # exercise encoding and failure handling. Gate-off behaviour has its
+        # own tests in test_write_gate.py.
+        ConfName.ALLOW_HARDWARE_WRITES: True,
         ConfName.SLEEP_AFTER_WRITE: 3,
         ConfName.BATTERY_RATING_ADJUST: 0,
         ConfName.BATTERY_ENERGY_RESET_CYCLES: 0,

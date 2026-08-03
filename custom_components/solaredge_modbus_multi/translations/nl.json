@@ -72,6 +72,7 @@
           "detect_meters": "Meters automatisch detecteren",
           "detect_batteries": "Batterijen automatisch detecteren",
           "detect_extras": "Automatische detectie van aanvullende entiteiten",
+          "allow_hardware_writes": "Hardwareschrijfacties toestaan (Modbus-schrijfopdrachten)",
           "advanced_power_control": "Opties voor vermogensregeling",
           "sleep_after_write": "Omvormer commando vertraging (seconden)"
         }

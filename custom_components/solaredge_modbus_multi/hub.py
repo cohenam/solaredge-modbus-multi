@@ -181,6 +181,10 @@ class SolarEdgeModbusMultiHub:
             ConfName.ALLOW_BATTERY_ENERGY_RESET,
             bool(ConfDefaultFlag.ALLOW_BATTERY_ENERGY_RESET),
         )
+        self._allow_hardware_writes = entry_options.get(
+            ConfName.ALLOW_HARDWARE_WRITES,
+            bool(ConfDefaultFlag.ALLOW_HARDWARE_WRITES),
+        )
         self._sleep_after_write = entry_options.get(
             ConfName.SLEEP_AFTER_WRITE, ConfDefaultInt.SLEEP_AFTER_WRITE
         )
@@ -258,6 +262,7 @@ class SolarEdgeModbusMultiHub:
                 f"adv_storage_control={self._adv_storage_control}, "
                 f"adv_site_limit_control={self._adv_site_limit_control}, "
                 f"allow_battery_energy_reset={self._allow_battery_energy_reset}, "
+                f"allow_hardware_writes={self._allow_hardware_writes}, "
                 f"sleep_after_write={self._sleep_after_write}, "
                 f"battery_rating_adjust={self._battery_rating_adjust}, "
             ),
@@ -706,6 +711,16 @@ class SolarEdgeModbusMultiHub:
     async def write_registers(self, unit: int, address: int, payload) -> None:
         """Write modbus registers to inverter."""
 
+        # Central refusal, not just entity suppression: a stale entity, a
+        # restored service call or a future caller must not reach the
+        # transport while hardware writes are disabled.
+        if not self._allow_hardware_writes:
+            raise HomeAssistantError(
+                "Hardware writes are disabled for this SolarEdge hub. Enable "
+                '"Allow Hardware Writes" in the integration options to permit '
+                f"writing to device ID {unit}."
+            )
+
         try:
             result = await self._transport.write_registers_raw(unit, address, payload)
 
@@ -850,6 +865,10 @@ class SolarEdgeModbusMultiHub:
     @property
     def allow_battery_energy_reset(self) -> bool:
         return self._allow_battery_energy_reset
+
+    @property
+    def option_allow_hardware_writes(self) -> bool:
+        return self._allow_hardware_writes
 
     @property
     def battery_rating_adjust(self) -> int:

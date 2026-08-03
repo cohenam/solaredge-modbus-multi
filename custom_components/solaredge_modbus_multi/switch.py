@@ -26,6 +26,10 @@ async def async_setup_entry(
     hub = config_entry.runtime_data.hub
     coordinator = config_entry.runtime_data.coordinator
 
+    # Every entity on this platform writes to the inverter.
+    if not hub.option_allow_hardware_writes:
+        return
+
     entities = []
 
     """ Power Control Options: Site Limit Control """
