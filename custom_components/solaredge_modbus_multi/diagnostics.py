@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
@@ -42,7 +43,6 @@ async def async_get_config_entry_diagnostics(
     """Return diagnostics for a config entry."""
     hub = config_entry.runtime_data.hub
 
-    stats = hub.transport_stats
     data: dict[str, Any] = {
         "pymodbus_version": hub.pymodbus_version,
         "hardware_writes_enabled": hub.option_allow_hardware_writes,
@@ -56,13 +56,9 @@ async def async_get_config_entry_diagnostics(
             "pending_write": hub.has_write,
             "uncommitted_power_settings": hub.uncommitted_power_settings,
             "coordinator_timeout": hub.coordinator_timeout,
-            "transport": {
-                "reads": stats.reads,
-                "writes": stats.writes,
-                "connects": stats.connects,
-                "reconnects": stats.reconnects,
-                "last_error": stats.last_error,
-            },
+            # Whole dataclass, not a hand-picked subset: listing fields here
+            # silently dropped recycles/connection_losses when they were added.
+            "transport": asdict(hub.transport_stats),
         },
     }
 

@@ -18,6 +18,7 @@ from custom_components.solaredge_modbus_multi.diagnostics import (
     async_get_config_entry_diagnostics,
     format_values,
 )
+from custom_components.solaredge_modbus_multi.modbus_transport import PollStats
 
 
 @pytest.fixture(autouse=True)
@@ -165,6 +166,9 @@ def mock_hub():
     hub.inverters = []
     hub.meters = []
     hub.batteries = []
+    # A real PollStats, not an auto-mock: diagnostics serializes the whole
+    # dataclass, and a mock standing in for it hides field-level drift.
+    hub.transport_stats = PollStats()
     return hub
 
 
@@ -789,6 +793,7 @@ async def test_diagnostics_polling_section(
     hass, mock_config_entry_data, mock_config_entry_options, mock_modbus_client
 ) -> None:
     """Diagnostics expose poll-tier state and sanitized transport stats."""
+    from dataclasses import fields
     from types import SimpleNamespace
     from unittest.mock import MagicMock, patch
 
@@ -832,5 +837,8 @@ async def test_diagnostics_polling_section(
     assert polling["transport"]["connects"] == 1
     assert polling["transport"]["reads"] == 0
     assert polling["transport"]["last_error"] is None
+    # Every counter must be exported. A hand-picked subset here is how
+    # recycles/connection_losses stayed invisible after being added.
+    assert set(polling["transport"]) == {f.name for f in fields(PollStats)}
     # Redaction still applies to the config entry payload.
     assert diagnostics["config_entry"]["data"]["host"] == "**REDACTED**"
