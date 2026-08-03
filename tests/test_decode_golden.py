@@ -25,11 +25,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from custom_components.solaredge_modbus_multi.const import DOMAIN, ConfName
+from custom_components.solaredge_modbus_multi.devices import decode_fields
 from custom_components.solaredge_modbus_multi.hub import (
     SolarEdgeBattery,
     SolarEdgeInverter,
@@ -49,6 +50,24 @@ from tests.conftest import (
 )
 
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "decode_golden.json"
+
+
+@pytest.mark.parametrize(
+    ("fields", "registers", "size"),
+    [
+        pytest.param(["value"], [1], 2, id="incomplete-chunk"),
+        pytest.param(["value"], [1, 2, 3], 2, id="excess-register"),
+        pytest.param(["value"], [1, 2], 0, id="zero-size"),
+        pytest.param(["value"], [1, 2], -1, id="negative-size"),
+    ],
+)
+def test_decode_fields_rejects_invalid_shape(fields, registers, size):
+    decoder = MagicMock()
+
+    with pytest.raises(ValueError):
+        decode_fields(fields, registers, decoder, size)
+
+    decoder.assert_not_called()
 
 
 def build_simple_space() -> dict[int, int]:

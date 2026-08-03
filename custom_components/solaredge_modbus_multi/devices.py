@@ -195,6 +195,16 @@ def decode_fields(
 
     `registers` must hold exactly `size` registers per field (strict zip).
     """
+    if size <= 0:
+        raise ValueError("Decode field size must be positive")
+
+    expected_registers = len(fields) * size
+    if len(registers) != expected_registers:
+        raise ValueError(
+            f"Expected {expected_registers} registers for {len(fields)} fields, "
+            f"got {len(registers)}"
+        )
+
     values = [
         decoder(registers[i : i + size], **decoder_kwargs)
         for i in range(0, len(registers), size)
