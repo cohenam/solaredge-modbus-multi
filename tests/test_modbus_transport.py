@@ -31,7 +31,6 @@ from custom_components.solaredge_modbus_multi.exceptions import (
 )
 from custom_components.solaredge_modbus_multi.modbus_transport import ModbusTransport
 from tests.conftest import connection_double
-from tests.fake_modbus_server import FakeModbusServer
 
 
 @pytest.fixture
@@ -241,25 +240,6 @@ async def test_hold_session_excludes_other_tasks(transport) -> None:
 # use a real connection because that laundering only happens in the real
 # dependency — a mock would raise CancelledError straight through and prove
 # nothing.
-
-
-@pytest.fixture(autouse=False)
-def _allow_sockets(socket_enabled):
-    """These tests intentionally use real localhost sockets."""
-    yield
-
-
-@pytest.fixture
-def make_server():
-    servers: list[FakeModbusServer] = []
-
-    async def _make(**kwargs) -> FakeModbusServer:
-        server = FakeModbusServer(**kwargs)
-        await server.start()
-        servers.append(server)
-        return server
-
-    yield _make
 
 
 def _real_transport(port: int, *, timeout: float) -> ModbusTransport:

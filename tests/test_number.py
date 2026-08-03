@@ -36,25 +36,6 @@ from custom_components.solaredge_modbus_multi.number import (
 
 
 @pytest.fixture
-def mock_coordinator():
-    """Create a mock coordinator."""
-    coordinator = MagicMock()
-    coordinator.async_add_listener = MagicMock()
-    coordinator.async_request_refresh = AsyncMock()
-    coordinator.data = {}
-    return coordinator
-
-
-@pytest.fixture
-def mock_config_entry():
-    """Create a mock config entry."""
-    entry = MagicMock()
-    entry.entry_id = "test_entry_123"
-    entry.data = {"name": "Test SolarEdge"}
-    return entry
-
-
-@pytest.fixture
 def mock_inverter_platform():
     """Create a mock inverter platform with typical decoded data."""
     platform = MagicMock()
@@ -1316,6 +1297,8 @@ class TestAsyncSetupEntry:
         inverter.decoded_storage_control = True
         inverter.has_battery = True
         inverter.advanced_power_control = True
+        inverter.gpc_may_be_supported = True
+        inverter.apc_may_be_supported = True
         hub.inverters = [inverter]
 
         coordinator = MagicMock()
@@ -1348,6 +1331,8 @@ class TestAsyncSetupEntry:
         inverter.decoded_storage_control = False
         inverter.has_battery = False
         inverter.advanced_power_control = False
+        inverter.gpc_may_be_supported = False
+        inverter.apc_may_be_supported = False
         hub.inverters = [inverter]
 
         coordinator = MagicMock()

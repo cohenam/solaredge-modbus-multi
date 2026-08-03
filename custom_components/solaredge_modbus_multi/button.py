@@ -35,7 +35,7 @@ async def async_setup_entry(
             continue
 
         """ Power Control Block """
-        if hub.option_detect_extras and inverter.advanced_power_control is not False:
+        if inverter.apc_may_be_supported:
             entities.append(
                 SolarEdgeCommitControlSettings(inverter, config_entry, coordinator)
             )
@@ -75,12 +75,14 @@ class SolarEdgeRefreshButton(SolarEdgeButtonBase):
 
 
 class SolarEdgeAdvancedPowerControlButton(SolarEdgeButtonBase):
-    """A button that writes an Advanced Power Control register.
+    """A button that writes 1 to an Advanced Power Control register.
 
     These exist before detection resolves, so both the entity and the write
     itself are gated on confirmed APC support: pressing one commits settings
     to inverter flash, which must never happen on an unverified capability.
     """
+
+    _write_address: int
 
     @property
     def available(self) -> bool:
@@ -93,6 +95,16 @@ class SolarEdgeAdvancedPowerControlButton(SolarEdgeButtonBase):
                 f"{self._platform.inverter_unit_id}; refusing to write."
             )
 
+    async def async_press(self) -> None:
+        _LOGGER.debug(f"set {self.unique_id} to 1")
+
+        self._assert_supported()
+        await self._platform.write_registers(
+            address=self._write_address,
+            payload=encode_uint16(1),
+        )
+        await self.async_update()
+
 
 class SolarEdgeCommitControlSettings(SolarEdgeAdvancedPowerControlButton):
     """Button to Commit Power Control Settings."""
@@ -100,20 +112,11 @@ class SolarEdgeCommitControlSettings(SolarEdgeAdvancedPowerControlButton):
     _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:content-save-cog-outline"
     _attr_name = "Commit Power Settings"
+    _write_address = 61696
 
     @property
     def unique_id(self) -> str:
         return f"{self._platform.uid_base}bt_commit_pwr_settings"
-
-    async def async_press(self) -> None:
-        _LOGGER.debug(f"set {self.unique_id} to 1")
-
-        self._assert_supported()
-        await self._platform.write_registers(
-            address=61696,
-            payload=encode_uint16(1),
-        )
-        await self.async_update()
 
 
 class SolarEdgeDefaultControlSettings(SolarEdgeAdvancedPowerControlButton):
@@ -122,6 +125,7 @@ class SolarEdgeDefaultControlSettings(SolarEdgeAdvancedPowerControlButton):
     _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:restore-alert"
     _attr_name = "Default Power Settings"
+    _write_address = 61697
 
     @property
     def unique_id(self) -> str:
@@ -130,13 +134,3 @@ class SolarEdgeDefaultControlSettings(SolarEdgeAdvancedPowerControlButton):
     @property
     def entity_registry_enabled_default(self) -> bool:
         return False
-
-    async def async_press(self) -> None:
-        _LOGGER.debug(f"set {self.unique_id} to 1")
-
-        self._assert_supported()
-        await self._platform.write_registers(
-            address=61697,
-            payload=encode_uint16(1),
-        )
-        await self.async_update()

@@ -79,15 +79,12 @@ class SolarEdgeDeviceScanner:
         self._scan_timeout = scan_timeout
         self._host = host
         self._port = port
-        # A private session: retries=0 because this class does its own
-        # retry loop, and no auto-reconnect (reconnect happens explicitly).
+        # A private session: this class does its own retry loop and
+        # reconnects explicitly.
         self._transport = ModbusTransport(
             host=host,
             port=port,
             timeout=scan_timeout,
-            retries=0,
-            reconnect_delay=0,
-            reconnect_delay_max=0,
         )
 
         self.inverters = []
@@ -219,20 +216,16 @@ class SolarEdgeDeviceScanner:
         """
         attempt = 1
 
-        # Response waiting is governed by the request timeout (scan_timeout):
-        # a silent or mismatched (stale txn / wrong unit) response surfaces as
-        # ModbusIOError after `timeout` seconds. The transport retires the
-        # connection on any such failure, so every attempt starts from a clean
-        # connection state.
+        # A silent or mismatched (stale txn / wrong unit) response surfaces
+        # as ModbusIOError after the per-request scan_timeout; recycling then
+        # starts the next attempt from a clean connection state.
         while attempt <= self._scan_retries:
             if not self._transport.connected:
                 try:
                     async with asyncio.timeout(self._connect_timeout):
                         await self._transport.connect()
                 except (TimeoutError, OSError, ModbusIOError):
-                    await self._transport.recycle()
-                    attempt += 1
-                    continue
+                    pass
 
                 if not self._transport.connected:
                     await self._transport.recycle()

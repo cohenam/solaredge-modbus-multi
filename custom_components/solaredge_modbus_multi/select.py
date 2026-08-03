@@ -53,7 +53,7 @@ async def async_setup_entry(
             entities.append(SolaredgeLimitControl(inverter, config_entry, coordinator))
 
         """ Power Control Block """
-        if hub.option_detect_extras and inverter.advanced_power_control is not False:
+        if inverter.apc_may_be_supported:
             entities.append(
                 SolarEdgeReactivePowerMode(inverter, config_entry, coordinator)
             )

@@ -118,14 +118,14 @@ async def async_setup_entry(
         entities.append(DCPower(inverter, config_entry, coordinator))
         entities.append(HeatSinkTemperature(inverter, config_entry, coordinator))
 
-        if hub.option_detect_extras and inverter.global_power_control is not False:
+        if inverter.gpc_may_be_supported:
             entities.append(SolarEdgeRRCR(inverter, config_entry, coordinator))
             entities.append(
                 SolarEdgeActivePowerLimit(inverter, config_entry, coordinator)
             )
             entities.append(SolarEdgeCosPhi(inverter, config_entry, coordinator))
 
-        if hub.option_detect_extras and inverter.advanced_power_control is not False:
+        if inverter.apc_may_be_supported:
             entities.append(
                 SolarEdgeCommitControlSettings(inverter, config_entry, coordinator)
             )
@@ -1264,9 +1264,22 @@ class StatusVendor4(SolarEdgeSensorBase):
 
 
 class SolarEdgeGlobalPowerControlBlock(SolarEdgeSensorBase):
+    """Sensor on the Global Dynamic Power Control block, gated on the probe.
+
+    The capability is tri-state and the two properties read it differently
+    on purpose: `available` is truthy, so entities stay unavailable while
+    the probe is undecided (None); the registry default is `is not False`,
+    because it is consulted only once, at first registration, and a later
+    successful probe cannot re-enable a disabled registry entry.
+    """
+
     @property
     def available(self) -> bool:
         return super().available and self._platform.global_power_control
+
+    @property
+    def entity_registry_enabled_default(self) -> bool:
+        return self._platform.global_power_control is not False
 
 
 class SolarEdgeRRCR(SolarEdgeGlobalPowerControlBlock):
@@ -1274,13 +1287,6 @@ class SolarEdgeRRCR(SolarEdgeGlobalPowerControlBlock):
         key="rrcr",
         name="RRCR Status",
     )
-
-    @property
-    def entity_registry_enabled_default(self) -> bool:
-        # `is not False`, not truthiness: a capability still undecided at setup
-        # must register enabled, because this is only consulted once and a
-        # later successful probe cannot re-enable a disabled registry entry.
-        return self._platform.global_power_control is not False
 
     @property
     def native_value(self):
@@ -1332,13 +1338,6 @@ class SolarEdgeActivePowerLimit(SolarEdgeGlobalPowerControlBlock):
     )
 
     @property
-    def entity_registry_enabled_default(self) -> bool:
-        # `is not False`, not truthiness: a capability still undecided at setup
-        # must register enabled, because this is only consulted once and a
-        # later successful probe cannot re-enable a disabled registry entry.
-        return self._platform.global_power_control is not False
-
-    @property
     def native_value(self) -> int:
         try:
             if (
@@ -1365,13 +1364,6 @@ class SolarEdgeCosPhi(SolarEdgeGlobalPowerControlBlock):
         suggested_display_precision=1,
         icon="mdi:angle-acute",
     )
-
-    @property
-    def entity_registry_enabled_default(self) -> bool:
-        # `is not False`, not truthiness: a capability still undecided at setup
-        # must register enabled, because this is only consulted once and a
-        # later successful probe cannot re-enable a disabled registry entry.
-        return self._platform.global_power_control is not False
 
     @property
     def native_value(self) -> float:
@@ -1773,7 +1765,100 @@ class SolarEdgeBatteryPowerInverted(SolarEdgeBatteryPower):
         return None if value is None else -value
 
 
-class SolarEdgeBatteryEnergyExport(SolarEdgeSensorBase):
+class SolarEdgeBatteryEnergyBase(SolarEdgeSensorBase):
+    """Battery lifetime energy counter with reset detection.
+
+    The reset threshold counts physical reads: `native_value` is evaluated
+    several times per update (state write, templates) and the battery block
+    may be polled less often than the coordinator cycles, so the bookkeeping
+    runs once per sample generation.
+    """
+
+    _register_key: str  # decoded_model key holding the counter
+    _label: str  # "Export" or "Import", for log messages
+
+    def __init__(self, platform, config_entry, coordinator):
+        super().__init__(platform, config_entry, coordinator)
+
+        self._last = None
+        self._count = 0
+        self._log_once = None
+        self._last_generation = None
+        self._cached_value = None
+
+    @property
+    def native_value(self):
+        try:
+            value = self._platform.decoded_model[self._register_key]
+            if value == SunSpecNotImpl.UINT64 or (
+                value == 0x0 and not self._platform.allow_battery_energy_reset
+            ):
+                return None
+
+            else:
+                if self._platform.sample_generation == self._last_generation:
+                    return self._cached_value
+
+                self._last_generation = self._platform.sample_generation
+                self._cached_value = None
+
+                try:
+                    if self._last is None:
+                        self._last = 0
+
+                    if value >= self._last:
+                        self._last = value
+                        self._log_once = False
+
+                        if self._platform.allow_battery_energy_reset:
+                            self._count = 0
+
+                        self._cached_value = value
+                        return self._cached_value
+
+                    else:
+                        if (
+                            not self._platform.allow_battery_energy_reset
+                            and not self._log_once
+                        ):
+                            _LOGGER.warning(
+                                (
+                                    f"Battery {self._label} Energy went backwards: "
+                                    f"Current value {value} "
+                                    f"is less than last value of {self._last}"
+                                )
+                            )
+                            self._log_once = True
+
+                        if self._platform.allow_battery_energy_reset:
+                            self._count += 1
+                            _LOGGER.debug(
+                                (
+                                    f"B_{self._label}_Energy went backwards: "
+                                    f"{value} "
+                                    f"< {self._last} cycle {self._count} of "
+                                    f"{self._platform.battery_energy_reset_cycles}"
+                                )
+                            )
+
+                            if self._count > self._platform.battery_energy_reset_cycles:
+                                _LOGGER.debug(
+                                    f"B_{self._label}_Energy reset at "
+                                    f"cycle {self._count}"
+                                )
+                                self._last = None
+                                self._count = 0
+
+                        return None
+
+                except OverflowError:
+                    return None
+
+        except TypeError:
+            return None
+
+
+class SolarEdgeBatteryEnergyExport(SolarEdgeBatteryEnergyBase):
     entity_description = SolarEdgeSensorEntityDescription(
         key="energy_export",
         name="Energy Export",
@@ -1785,95 +1870,11 @@ class SolarEdgeBatteryEnergyExport(SolarEdgeSensorBase):
         icon="mdi:battery-charging-20",
     )
 
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-
-        self._last = None
-        self._count = 0
-        self._log_once = None
-        self._last_generation = None
-        self._cached_value = None
-
-    @property
-    def native_value(self):
-        try:
-            if self._platform.decoded_model[
-                "B_Export_Energy_WH"
-            ] == SunSpecNotImpl.UINT64 or (
-                self._platform.decoded_model["B_Export_Energy_WH"] == 0x0
-                and not self._platform.allow_battery_energy_reset
-            ):
-                return None
-
-            else:
-                # The reset threshold counts physical reads: this property is
-                # evaluated several times per update (state write, templates)
-                # and the battery block may be polled less often than the
-                # coordinator cycles, so bookkeeping runs once per sample.
-                if self._platform.sample_generation == self._last_generation:
-                    return self._cached_value
-
-                self._last_generation = self._platform.sample_generation
-                self._cached_value = None
-
-                try:
-                    if self._last is None:
-                        self._last = 0
-
-                    if self._platform.decoded_model["B_Export_Energy_WH"] >= self._last:
-                        self._last = self._platform.decoded_model["B_Export_Energy_WH"]
-                        self._log_once = False
-
-                        if self._platform.allow_battery_energy_reset:
-                            self._count = 0
-
-                        self._cached_value = self._platform.decoded_model[
-                            "B_Export_Energy_WH"
-                        ]
-                        return self._cached_value
-
-                    else:
-                        if (
-                            not self._platform.allow_battery_energy_reset
-                            and not self._log_once
-                        ):
-                            _LOGGER.warning(
-                                (
-                                    "Battery Export Energy went backwards: Current value "
-                                    f"{self._platform.decoded_model['B_Export_Energy_WH']} "
-                                    f"is less than last value of {self._last}"
-                                )
-                            )
-                            self._log_once = True
-
-                        if self._platform.allow_battery_energy_reset:
-                            self._count += 1
-                            _LOGGER.debug(
-                                (
-                                    "B_Export_Energy went backwards: "
-                                    f"{self._platform.decoded_model['B_Export_Energy_WH']} "
-                                    f"< {self._last} cycle {self._count} of "
-                                    f"{self._platform.battery_energy_reset_cycles}"
-                                )
-                            )
-
-                            if self._count > self._platform.battery_energy_reset_cycles:
-                                _LOGGER.debug(
-                                    f"B_Export_Energy reset at cycle {self._count}"
-                                )
-                                self._last = None
-                                self._count = 0
-
-                        return None
-
-                except OverflowError:
-                    return None
-
-        except TypeError:
-            return None
+    _register_key = "B_Export_Energy_WH"
+    _label = "Export"
 
 
-class SolarEdgeBatteryEnergyImport(SolarEdgeSensorBase):
+class SolarEdgeBatteryEnergyImport(SolarEdgeBatteryEnergyBase):
     entity_description = SolarEdgeSensorEntityDescription(
         key="energy_import",
         name="Energy Import",
@@ -1885,92 +1886,8 @@ class SolarEdgeBatteryEnergyImport(SolarEdgeSensorBase):
         icon="mdi:battery-charging-100",
     )
 
-    def __init__(self, platform, config_entry, coordinator):
-        super().__init__(platform, config_entry, coordinator)
-
-        self._last = None
-        self._count = 0
-        self._log_once = None
-        self._last_generation = None
-        self._cached_value = None
-
-    @property
-    def native_value(self):
-        try:
-            if self._platform.decoded_model[
-                "B_Import_Energy_WH"
-            ] == SunSpecNotImpl.UINT64 or (
-                self._platform.decoded_model["B_Import_Energy_WH"] == 0x0
-                and not self._platform.allow_battery_energy_reset
-            ):
-                return None
-
-            else:
-                # The reset threshold counts physical reads: this property is
-                # evaluated several times per update (state write, templates)
-                # and the battery block may be polled less often than the
-                # coordinator cycles, so bookkeeping runs once per sample.
-                if self._platform.sample_generation == self._last_generation:
-                    return self._cached_value
-
-                self._last_generation = self._platform.sample_generation
-                self._cached_value = None
-
-                try:
-                    if self._last is None:
-                        self._last = 0
-
-                    if self._platform.decoded_model["B_Import_Energy_WH"] >= self._last:
-                        self._last = self._platform.decoded_model["B_Import_Energy_WH"]
-                        self._log_once = False
-
-                        if self._platform.allow_battery_energy_reset:
-                            self._count = 0
-
-                        self._cached_value = self._platform.decoded_model[
-                            "B_Import_Energy_WH"
-                        ]
-                        return self._cached_value
-
-                    else:
-                        if (
-                            not self._platform.allow_battery_energy_reset
-                            and not self._log_once
-                        ):
-                            _LOGGER.warning(
-                                (
-                                    "Battery Import Energy went backwards: Current value "
-                                    f"{self._platform.decoded_model['B_Import_Energy_WH']} "
-                                    f"is less than last value of {self._last}"
-                                )
-                            )
-                            self._log_once = True
-
-                        if self._platform.allow_battery_energy_reset:
-                            self._count += 1
-                            _LOGGER.debug(
-                                (
-                                    "B_Import_Energy went backwards: "
-                                    f"{self._platform.decoded_model['B_Import_Energy_WH']} "
-                                    f"< {self._last} cycle {self._count} of "
-                                    f"{self._platform.battery_energy_reset_cycles}"
-                                )
-                            )
-
-                            if self._count > self._platform.battery_energy_reset_cycles:
-                                _LOGGER.debug(
-                                    f"B_Import_Energy reset at cycle {self._count}"
-                                )
-                                self._last = None
-                                self._count = 0
-
-                        return None
-
-                except OverflowError:
-                    return None
-
-        except TypeError:
-            return None
+    _register_key = "B_Import_Energy_WH"
+    _label = "Import"
 
 
 class SolarEdgeBatteryMaxEnergy(SolarEdgeSensorBase):
