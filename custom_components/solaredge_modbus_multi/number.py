@@ -13,7 +13,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from pymodbus.client.mixin import ModbusClientMixin
+from modbus_connection.encode import encode_float32, encode_uint16, encode_uint32
 
 from . import SolarEdgeConfigEntry
 from .const import BatteryLimit, SunSpecNotImpl
@@ -147,11 +147,7 @@ class StorageACChargeLimit(SolarEdgeNumberBase):
         _LOGGER.debug(f"set {self.unique_id} to {value}")
         await self._platform.write_registers(
             address=57350,
-            payload=ModbusClientMixin.convert_to_registers(
-                float(value),
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            ),
+            payload=encode_float32(float(value), word_order="little"),
         )
         await self.async_update()
 
@@ -194,11 +190,7 @@ class StorageBackupReserve(SolarEdgeNumberBase):
         _LOGGER.debug(f"set {self.unique_id} to {value}")
         await self._platform.write_registers(
             address=57352,
-            payload=ModbusClientMixin.convert_to_registers(
-                int(value),
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            ),
+            payload=encode_float32(int(value), word_order="little"),
         )
         await self.async_update()
 
@@ -243,11 +235,7 @@ class StorageCommandTimeout(SolarEdgeNumberBase):
         _LOGGER.debug(f"set {self.unique_id} to {value}")
         await self._platform.write_registers(
             address=57355,
-            payload=ModbusClientMixin.convert_to_registers(
-                int(value),
-                data_type=ModbusClientMixin.DATATYPE.UINT32,
-                word_order="little",
-            ),
+            payload=encode_uint32(int(value), word_order="little"),
         )
         await self.async_update()
 
@@ -293,11 +281,7 @@ class StorageChargeLimit(SolarEdgeNumberBase):
         _LOGGER.debug(f"set {self.unique_id} to {value}")
         await self._platform.write_registers(
             address=57358,
-            payload=ModbusClientMixin.convert_to_registers(
-                int(value),
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            ),
+            payload=encode_float32(int(value), word_order="little"),
         )
         await self.async_update()
 
@@ -343,11 +327,7 @@ class StorageDischargeLimit(SolarEdgeNumberBase):
         _LOGGER.debug(f"set {self.unique_id} to {value}")
         await self._platform.write_registers(
             address=57360,
-            payload=ModbusClientMixin.convert_to_registers(
-                int(value),
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            ),
+            payload=encode_float32(int(value), word_order="little"),
         )
         await self.async_update()
 
@@ -386,11 +366,7 @@ class SolarEdgeSiteLimit(SolarEdgeNumberBase):
         _LOGGER.debug(f"set {self.unique_id} to {value}")
         await self._platform.write_registers(
             address=57346,
-            payload=ModbusClientMixin.convert_to_registers(
-                int(value),
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            ),
+            payload=encode_float32(int(value), word_order="little"),
         )
         await self.async_update()
 
@@ -432,11 +408,7 @@ class SolarEdgeExternalProductionMax(SolarEdgeNumberBase):
         _LOGGER.debug(f"set {self.unique_id} to {value}")
         await self._platform.write_registers(
             address=57362,
-            payload=ModbusClientMixin.convert_to_registers(
-                int(value),
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            ),
+            payload=encode_float32(int(value), word_order="little"),
         )
         await self.async_update()
 
@@ -482,11 +454,7 @@ class SolarEdgeActivePowerLimitSet(SolarEdgeNumberBase):
         _LOGGER.debug(f"set {self.unique_id} to {value}")
         await self._platform.write_registers(
             address=61441,
-            payload=ModbusClientMixin.convert_to_registers(
-                int(value),
-                data_type=ModbusClientMixin.DATATYPE.UINT16,
-                word_order="little",
-            ),
+            payload=encode_uint16(int(value)),
         )
         await self.async_update()
 
@@ -529,11 +497,7 @@ class SolarEdgeCosPhiSet(SolarEdgeNumberBase):
         _LOGGER.debug(f"set {self.unique_id} to {value}")
         await self._platform.write_registers(
             address=61442,
-            payload=ModbusClientMixin.convert_to_registers(
-                float(value),
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            ),
+            payload=encode_float32(float(value), word_order="little"),
         )
         await self.async_update()
 
@@ -576,11 +540,7 @@ class SolarEdgePowerReduce(SolarEdgeNumberBase):
         _LOGGER.debug(f"set {self.unique_id} to {value}")
         await self._platform.write_registers(
             address=61760,
-            payload=ModbusClientMixin.convert_to_registers(
-                float(value),
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            ),
+            payload=encode_float32(float(value), word_order="little"),
         )
         await self.async_update()
 
@@ -622,10 +582,6 @@ class SolarEdgeCurrentLimit(SolarEdgeNumberBase):
         _LOGGER.debug(f"set {self.unique_id} to {value}")
         await self._platform.write_registers(
             address=61838,
-            payload=ModbusClientMixin.convert_to_registers(
-                float(value),
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            ),
+            payload=encode_float32(float(value), word_order="little"),
         )
         await self.async_update()

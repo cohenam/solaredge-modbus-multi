@@ -9,7 +9,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from pymodbus.client.mixin import ModbusClientMixin
+from modbus_connection.encode import encode_int32, encode_uint16
 
 from . import SolarEdgeConfigEntry
 from .const import SunSpecNotImpl
@@ -95,11 +95,7 @@ class SolarEdgeExternalProduction(SolarEdgeSwitchBase):
 
         await self._platform.write_registers(
             address=57344,
-            payload=ModbusClientMixin.convert_to_registers(
-                set_bits,
-                data_type=ModbusClientMixin.DATATYPE.UINT16,
-                word_order="little",
-            ),
+            payload=encode_uint16(set_bits),
         )
         await self.async_update()
 
@@ -112,11 +108,7 @@ class SolarEdgeExternalProduction(SolarEdgeSwitchBase):
 
         await self._platform.write_registers(
             address=57344,
-            payload=ModbusClientMixin.convert_to_registers(
-                set_bits,
-                data_type=ModbusClientMixin.DATATYPE.UINT16,
-                word_order="little",
-            ),
+            payload=encode_uint16(set_bits),
         )
         await self.async_update()
 
@@ -152,11 +144,7 @@ class SolarEdgeNegativeSiteLimit(SolarEdgeSwitchBase):
 
         await self._platform.write_registers(
             address=57344,
-            payload=ModbusClientMixin.convert_to_registers(
-                set_bits,
-                data_type=ModbusClientMixin.DATATYPE.UINT16,
-                word_order="little",
-            ),
+            payload=encode_uint16(set_bits),
         )
         await self.async_update()
 
@@ -169,11 +157,7 @@ class SolarEdgeNegativeSiteLimit(SolarEdgeSwitchBase):
 
         await self._platform.write_registers(
             address=57344,
-            payload=ModbusClientMixin.convert_to_registers(
-                set_bits,
-                data_type=ModbusClientMixin.DATATYPE.UINT16,
-                word_order="little",
-            ),
+            payload=encode_uint16(set_bits),
         )
         await self.async_update()
 
@@ -202,9 +186,7 @@ class SolarEdgeGridControl(SolarEdgeSwitchBase):
 
         await self._platform.write_registers(
             address=61762,
-            payload=ModbusClientMixin.convert_to_registers(
-                0x1, data_type=ModbusClientMixin.DATATYPE.INT32, word_order="little"
-            ),
+            payload=encode_int32(0x1, word_order="little"),
         )
         await self.async_update()
 
@@ -213,8 +195,6 @@ class SolarEdgeGridControl(SolarEdgeSwitchBase):
 
         await self._platform.write_registers(
             address=61762,
-            payload=ModbusClientMixin.convert_to_registers(
-                0x0, data_type=ModbusClientMixin.DATATYPE.INT32, word_order="little"
-            ),
+            payload=encode_int32(0x0, word_order="little"),
         )
         await self.async_update()

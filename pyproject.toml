@@ -10,7 +10,9 @@ readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.12"
 dependencies = [
-    "pymodbus>=3.8.3",
+    "modbus-connection[pymodbus]==4.0.0a1",
+    "pymodbus==3.13.1",
+    "awesomeversion>=25.5.0",
 ]
 
 [project.optional-dependencies]
