@@ -4,9 +4,10 @@ Feeds fixed register images through the full hub decode path (inverter
 common/model, MMPPT, control blocks, meter, battery) and snapshots every
 decoded dict. This pins current decode behavior bit-for-bit — including
 word-order choices and slice quirks — so the transport/schema refactors
-(Stages 2-4) can prove they change nothing. Generated on first run
-(tests/fixtures/decode_golden.json); if a change is intentional, delete
-the fixture and re-run to regenerate.
+(Stages 2-4) can prove they change nothing. The fixture (tests/fixtures/decode_golden.json) is committed evidence,
+not a cache: a missing one fails rather than being regenerated. Rebuild
+it deliberately with SOLAREDGE_REGENERATE_DECODE_GOLDEN=1, which rewrites
+it and then fails so the new values get reviewed.
 
 Two scenarios cover both register-layout families:
 - "synergy_full": three-phase 103 + MMPPT(2 units) + Synergy meter offset
@@ -37,6 +38,7 @@ from custom_components.solaredge_modbus_multi.hub import (
     SolarEdgeModbusMultiHub,
 )
 from tests.conftest import (
+    assert_golden,
     create_exception_response,
     create_modbus_response,
     registers_from_values,
@@ -416,15 +418,7 @@ async def test_decode_golden_snapshot(
     rows = {"synergy_full": synergy_snapshot, "simple": simple_snapshot}
     rendered = json.dumps(rows, indent=1, sort_keys=True) + "\n"
 
-    if not GOLDEN_PATH.exists():
-        GOLDEN_PATH.parent.mkdir(parents=True, exist_ok=True)
-        GOLDEN_PATH.write_text(rendered)
-        return
-
-    assert json.loads(rendered) == json.loads(GOLDEN_PATH.read_text()), (
-        "Decoded-value drift detected. If intentional, delete "
-        f"{GOLDEN_PATH} and re-run to regenerate."
-    )
+    assert_golden(GOLDEN_PATH, rendered, drift="Decoded-value drift detected.")
 
 
 async def test_transaction_counts_per_cycle(

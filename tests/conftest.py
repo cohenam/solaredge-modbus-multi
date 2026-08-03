@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import os
 from collections.abc import Generator
 from functools import partial
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -45,6 +48,35 @@ def mock_config_entry_options() -> dict[str, Any]:
         ConfName.BATTERY_RATING_ADJUST: 0,
         ConfName.BATTERY_ENERGY_RESET_CYCLES: 0,
     }
+
+
+def assert_golden(path: Path, rendered: str, *, drift: str) -> None:
+    """Compare output against a committed golden, failing closed if absent.
+
+    A golden that regenerates itself when missing passes without evidence,
+    which makes it useless exactly when it matters most. Regeneration is
+    therefore explicit and noisy: set the fixture's regenerate variable and
+    the file is rewritten, then the test fails anyway, so the new values have
+    to be looked at before they can be committed.
+    """
+    variable = f"SOLAREDGE_REGENERATE_{path.stem.upper()}"
+
+    if os.environ.get(variable):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(rendered)
+        pytest.fail(
+            f"{variable} was set, so {path.name} was rewritten. Review the "
+            "diff, commit it, and re-run without the variable."
+        )
+
+    assert path.exists(), (
+        f"{path} is missing. It is committed evidence, not a cache — restore "
+        f"it from git. To rebuild it deliberately, run with {variable}=1."
+    )
+
+    assert json.loads(rendered) == json.loads(
+        path.read_text()
+    ), f"{drift} If intentional, re-run with {variable}=1."
 
 
 async def _call_unit_method(connection: MagicMock, name: str, *args, **kwargs):

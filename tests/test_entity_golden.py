@@ -25,6 +25,7 @@ from custom_components.solaredge_modbus_multi import (
     sensor,
     switch,
 )
+from tests.conftest import assert_golden
 
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "entity_golden.json"
 
@@ -126,13 +127,8 @@ async def test_entity_golden_snapshot(full_hub) -> None:
         key=lambda r: (r["class"], r["unique_id"] or ""),
     )
 
-    if not GOLDEN_PATH.exists():
-        GOLDEN_PATH.parent.mkdir(parents=True, exist_ok=True)
-        GOLDEN_PATH.write_text(json.dumps(rows, indent=1) + "\n")
-        return
-
-    golden = json.loads(GOLDEN_PATH.read_text())
-    assert rows == golden, (
-        "Entity identity drift detected. If intentional, delete "
-        f"{GOLDEN_PATH} and re-run to regenerate."
+    assert_golden(
+        GOLDEN_PATH,
+        json.dumps(rows, indent=1) + "\n",
+        drift="Entity identity drift detected.",
     )
