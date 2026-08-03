@@ -794,7 +794,7 @@ class SolarEdgeModbusMultiHub:
             # not have been applied" into an answer one poll later, instead
             # of leaving stale entity state until the settings cadence comes
             # round, which can be minutes.
-            self._note_write_pending_verification(address)
+            self._note_write_pending_verification(address, confirmed=False)
             _LOGGER.error(f"Write to inverter ID {unit} had no response: {e}")
             raise HomeAssistantError(
                 f"No response from inverter ID {unit}; the write at address "
@@ -806,8 +806,14 @@ class SolarEdgeModbusMultiHub:
                 f"Error sending command to inverter ID {unit}: {e}."
             )
 
+        except asyncio.CancelledError:
+            # The frame may have reached the inverter before the cancellation
+            # landed, so the outcome is as uncertain as a lost response.
+            self._note_write_pending_verification(address, confirmed=False)
+            raise
+
         self.has_write = address
-        self._note_write_pending_verification(address)
+        self._note_write_pending_verification(address, confirmed=True)
 
         try:
             if self.sleep_after_write > 0:
@@ -822,12 +828,21 @@ class SolarEdgeModbusMultiHub:
 
         _LOGGER.debug(f"Finished with write {address}.")
 
-    def _note_write_pending_verification(self, address: int) -> None:
+    def _note_write_pending_verification(
+        self, address: int, *, confirmed: bool
+    ) -> None:
         """Book a write for re-reading, whether or not it was confirmed.
 
-        Called for a confirmed write and for one whose response was lost,
-        because both leave the settings blocks possibly changed and the
-        entities possibly stale.
+        A confirmed write, one whose response was lost, and one cancelled
+        mid-flight all leave the settings blocks possibly changed and the
+        entities possibly stale, so all three force the re-read.
+
+        `confirmed` decides only what may be *forgotten*. Both directions err
+        the same way — toward warning rather than silence: an unconfirmed
+        setting is still tracked, because prompting a harmless commit beats
+        losing it at the next inverter restart; and an unconfirmed commit does
+        not clear that tracking, because a commit that never landed would
+        otherwise take the warning away with it.
         """
         # A counter, not a flag, so an in-flight refresh cannot consume this
         # request; it must be recorded exactly once per write.
@@ -835,10 +850,15 @@ class SolarEdgeModbusMultiHub:
 
         # Track APC static settings pending an explicit commit (61696) or
         # restore-defaults (61697); blocks span 61696-61781 and 61782-61865.
-        # An unconfirmed write is tracked too: warning about a setting that
-        # never landed only prompts a harmless commit, while staying silent
-        # about one that did land loses it at the next inverter restart.
         if address in (61696, 61697):
+            if not confirmed:
+                _LOGGER.debug(
+                    "Commit/restore at %s was not confirmed; keeping %s pending.",
+                    address,
+                    sorted(self._uncommitted_power_settings),
+                )
+                return
+
             if self._uncommitted_power_settings:
                 _LOGGER.debug(
                     "Power control settings %s committed/restored.",

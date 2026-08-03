@@ -369,3 +369,36 @@ async def test_cancelled_connect_does_not_leak_a_session(transport) -> None:
     assert transport.stats.recycles == 1
     assert connection.close.await_count == 1, "the leaked session must be closed"
     assert transport._connection is None
+
+
+@pytest.mark.parametrize(
+    ("operation", "args"),
+    [("read_holding_registers", (40000, 2)), ("write_registers", (61760, [0, 1]))],
+    ids=["read", "write"],
+)
+async def test_direct_cancellation_still_retires_the_session(
+    transport, operation, args
+) -> None:
+    """The library auto-connects inside every unit operation, and shields it.
+
+    A cancellation landing there arrives as a bare CancelledError, which is a
+    BaseException — so the ModbusError arms never see it. Without its own
+    handler the socket stays open with nobody owning it, and these inverters
+    accept exactly one session.
+    """
+    await transport.connect()
+    connection = transport.built[-1]
+    getattr(connection, operation).side_effect = asyncio.CancelledError
+
+    call = (
+        transport.read_holding_registers_raw(1, *args)
+        if operation == "read_holding_registers"
+        else transport.write_registers_raw(1, *args)
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await call
+
+    assert transport.stats.recycles == 1
+    assert connection.close.await_count == 1, "the session must be closed"
+    assert transport._connection is None

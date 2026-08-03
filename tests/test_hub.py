@@ -1456,3 +1456,71 @@ async def test_unconfirmed_write_still_schedules_verification(
     # silently losing a setting that did land at the next inverter restart.
     assert mock_hub.uncommitted_power_settings == [61760]
     assert mock_client.write_registers.await_count == 1, "never re-sent"
+
+
+async def test_cancelled_write_is_booked_as_uncertain(
+    mock_hub, mock_modbus_client
+) -> None:
+    """A cancelled write may already have reached the inverter.
+
+    The frame can be on the wire before the cancellation lands, so the outcome
+    is exactly as uncertain as a lost response and must be re-read.
+    """
+    mock_client = mock_modbus_client.return_value
+    mock_client.write_registers.side_effect = asyncio.CancelledError
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
+        mock_modbus_client,
+    ):
+        await mock_hub.connect()
+
+        with pytest.raises(asyncio.CancelledError):
+            await mock_hub.write_registers(unit=1, address=61760, payload=[0, 1])
+
+    assert mock_hub._slow_poll_requests == 1, "the re-read must be requested"
+    assert mock_hub.uncommitted_power_settings == [61760]
+
+
+@pytest.mark.parametrize("address", [61696, 61697], ids=["commit", "restore"])
+async def test_unconfirmed_commit_keeps_settings_pending(
+    mock_hub, mock_modbus_client, address
+) -> None:
+    """A commit that may not have landed must not clear the warning.
+
+    Clearing on an unconfirmed commit is the one direction that loses safety:
+    if it never reached the inverter, the settings still will not survive a
+    restart and nothing would say so.
+    """
+    mock_hub._uncommitted_power_settings = {61700, 61760}
+    mock_client = mock_modbus_client.return_value
+    mock_client.write_registers.side_effect = ModbusTimeoutError("no answer")
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
+        mock_modbus_client,
+    ):
+        await mock_hub.connect()
+
+        with pytest.raises(HomeAssistantError, match="may or may not have been"):
+            await mock_hub.write_registers(unit=1, address=address, payload=[1])
+
+    assert mock_hub.uncommitted_power_settings == [61700, 61760], "still pending"
+    assert mock_hub._slow_poll_requests == 1, "but still re-read"
+
+
+@pytest.mark.parametrize("address", [61696, 61697], ids=["commit", "restore"])
+async def test_confirmed_commit_clears_settings(
+    mock_hub, mock_modbus_client, address
+) -> None:
+    """Regression guard: a confirmed commit still clears, as it always did."""
+    mock_hub._uncommitted_power_settings = {61700, 61760}
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
+        mock_modbus_client,
+    ):
+        await mock_hub.connect()
+        await mock_hub.write_registers(unit=1, address=address, payload=[1])
+
+    assert mock_hub.uncommitted_power_settings == []

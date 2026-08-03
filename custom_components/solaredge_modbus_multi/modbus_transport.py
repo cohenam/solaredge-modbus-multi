@@ -216,6 +216,15 @@ class ModbusTransport:
         except (ModbusError, OSError) as e:  # closing must not mask the cause
             _LOGGER.debug(f"Error closing retired connection: {e}")
 
+    async def _shielded_recycle(self) -> None:
+        """Retire the generation even though the caller is being cancelled.
+
+        The state change is synchronous, so the generation is retired either
+        way; the shield is what lets the socket close actually finish rather
+        than being abandoned half-way by the same cancellation.
+        """
+        await asyncio.shield(self._recycle_unlocked())
+
     async def recycle(self) -> None:
         """Replace the connection, taking the lock unless already held."""
         if self._held_by_current_task():
@@ -257,7 +266,7 @@ class ModbusTransport:
             # live socket behind. These inverters accept one session, so the
             # generation is retired rather than leaked.
             self.stats.last_error = "connect: cancelled"
-            await self._recycle_unlocked()
+            await self._shielded_recycle()
             raise
 
     async def disconnect(self, clear_client: bool = False) -> None:
@@ -299,6 +308,15 @@ class ModbusTransport:
                 address, count
             )
 
+        except asyncio.CancelledError:
+            # The library auto-connects before every operation and shields that
+            # connect, so a cancellation here can leave a live socket nobody
+            # owns. CancelledError is a BaseException, so the ModbusError arm
+            # below never sees it.
+            self.stats.last_error = f"read unit {unit}: cancelled"
+            await self._shielded_recycle()
+            raise
+
         except ModbusExceptionError as e:
             # The device answered, just not with data. Sanitized: type and
             # code only, never payload or host.
@@ -337,6 +355,13 @@ class ModbusTransport:
             connection = self._current()
             try:
                 await connection.for_unit(unit).write_registers(address, payload)
+
+            except asyncio.CancelledError:
+                # The frame may already be on the wire; the session must not be
+                # left open regardless. Callers treat this as uncertain.
+                self.stats.last_error = f"write unit {unit}: cancelled"
+                await self._shielded_recycle()
+                raise
 
             except ModbusExceptionError as e:
                 self.stats.last_error = (
