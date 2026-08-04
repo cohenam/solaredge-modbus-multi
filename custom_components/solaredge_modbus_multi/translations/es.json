@@ -44,6 +44,7 @@
           "detect_meters": "Detectar medidores automáticamente",
           "detect_batteries": "Detectar baterías automáticamente",
           "detect_extras": "Detectar entidades adicionales automáticamente",
+          "allow_hardware_writes": "Permitir escrituras en el hardware (comandos de escritura Modbus)",
           "advanced_power_control": "Opciones de control de energía",
           "sleep_after_write": "Retraso de comando del inversor (segundos)"
         }
@@ -60,7 +61,7 @@
         "title": "Opciones de batería",
         "data": {
           "allow_battery_energy_reset": "Permitir reinicio de energía de la batería",
-          "battery_energy_reset_cycles": "Ciclos de actualización para reiniciar energía de la batería",
+          "battery_energy_reset_cycles": "Lecturas consecutivas más bajas de la batería antes de aceptar un reinicio de energía",
           "battery_rating_adjust": "Ajuste de capacidad de la batería (porcentaje)"
         }
       }

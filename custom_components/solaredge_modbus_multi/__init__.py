@@ -17,7 +17,15 @@ from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, ConfDefaultInt, ConfName, RetrySettings
+from .const import (
+    CONFIGURABLE_POLL_GROUPS,
+    DOMAIN,
+    POLL_MULTIPLIER_MAX,
+    POLL_MULTIPLIER_MIN,
+    ConfDefaultInt,
+    ConfName,
+    RetrySettings,
+)
 from .hub import (
     LEGACY_ISSUE_IDS,
     DataUpdateFailed,
@@ -68,6 +76,18 @@ CONFIG_SCHEMA = vol.Schema(
                         vol.Optional("limit"): vol.All(
                             vol.Coerce(int), vol.Range(min=1, max=100)
                         ),
+                    }
+                ),
+                # Per-group poll cadence. Strict on purpose: an unknown group
+                # name (or "core", which is always every cycle) fails at
+                # startup rather than silently polling everything.
+                "poll": vol.Schema(
+                    {
+                        vol.Optional(f"{group}"): vol.All(
+                            vol.Coerce(int),
+                            vol.Range(min=POLL_MULTIPLIER_MIN, max=POLL_MULTIPLIER_MAX),
+                        )
+                        for group in CONFIGURABLE_POLL_GROUPS
                     }
                 ),
                 "modbus": vol.Schema(

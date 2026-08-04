@@ -9,7 +9,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.solaredge_modbus_multi.const import DOMAIN
+from custom_components.solaredge_modbus_multi.const import DOMAIN, PollGroup
 from custom_components.solaredge_modbus_multi.diagnostics import (
     REDACT_BATTERY,
     REDACT_CONFIG,
@@ -18,6 +18,7 @@ from custom_components.solaredge_modbus_multi.diagnostics import (
     async_get_config_entry_diagnostics,
     format_values,
 )
+from custom_components.solaredge_modbus_multi.modbus_transport import PollStats
 
 
 @pytest.fixture(autouse=True)
@@ -161,9 +162,13 @@ def mock_hub():
     """Create a mock SolarEdgeModbusMultiHub."""
     hub = MagicMock()
     hub.pymodbus_version = "3.8.3"
+    hub.option_allow_hardware_writes = False
     hub.inverters = []
     hub.meters = []
     hub.batteries = []
+    # A real PollStats, not an auto-mock: diagnostics serializes the whole
+    # dataclass, and a mock standing in for it hides field-level drift.
+    hub.transport_stats = PollStats()
     return hub
 
 
@@ -287,6 +292,7 @@ class TestAsyncGetConfigEntryDiagnostics:
         # Check basic structure
         assert "pymodbus_version" in result
         assert result["pymodbus_version"] == "3.8.3"
+        assert result["hardware_writes_enabled"] is False
         assert "config_entry" in result
         assert "yaml" in result
 
@@ -787,6 +793,7 @@ async def test_diagnostics_polling_section(
     hass, mock_config_entry_data, mock_config_entry_options, mock_modbus_client
 ) -> None:
     """Diagnostics expose poll-tier state and sanitized transport stats."""
+    from dataclasses import fields
     from types import SimpleNamespace
     from unittest.mock import MagicMock, patch
 
@@ -807,7 +814,7 @@ async def test_diagnostics_polling_section(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await hub.connect()
@@ -819,10 +826,19 @@ async def test_diagnostics_polling_section(
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
 
     polling = diagnostics["polling"]
-    assert polling["slow_poll_multiplier"] == hub._slow_poll_multiplier
+    assert polling["poll_groups"] == hub.poll_groups
+    assert sorted(polling["poll_groups"]) == sorted(str(g) for g in PollGroup)
+    assert polling["poll_groups"]["core"]["multiplier"] == 1
+    # Nothing has been served yet, so the cadence evidence is empty.
+    assert all(
+        group["last_served_cycle"] is None for group in polling["poll_groups"].values()
+    )
     assert polling["uncommitted_power_settings"] == []
     assert polling["transport"]["connects"] == 1
     assert polling["transport"]["reads"] == 0
     assert polling["transport"]["last_error"] is None
+    # Every counter must be exported. A hand-picked subset here is how
+    # recycles/connection_losses stayed invisible after being added.
+    assert set(polling["transport"]) == {f.name for f in fields(PollStats)}
     # Redaction still applies to the config entry payload.
     assert diagnostics["config_entry"]["data"]["host"] == "**REDACTED**"

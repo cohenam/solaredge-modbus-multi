@@ -1,0 +1,712 @@
+[
+ {
+  "address": 57350,
+  "call": "async_set_native_value(0)",
+  "entity": "StorageACChargeLimit",
+  "payload": [
+   0,
+   0
+  ]
+ },
+ {
+  "address": 57350,
+  "call": "async_set_native_value(12.5)",
+  "entity": "StorageACChargeLimit",
+  "payload": [
+   0,
+   16712
+  ]
+ },
+ {
+  "address": 57350,
+  "call": "async_set_native_value(100000000)",
+  "entity": "StorageACChargeLimit",
+  "payload": [
+   48160,
+   19646
+  ]
+ },
+ {
+  "address": 57352,
+  "call": "async_set_native_value(0)",
+  "entity": "StorageBackupReserve",
+  "payload": [
+   0,
+   0
+  ]
+ },
+ {
+  "address": 57352,
+  "call": "async_set_native_value(12.5)",
+  "entity": "StorageBackupReserve",
+  "payload": [
+   0,
+   16704
+  ]
+ },
+ {
+  "address": 57352,
+  "call": "async_set_native_value(100)",
+  "entity": "StorageBackupReserve",
+  "payload": [
+   0,
+   17096
+  ]
+ },
+ {
+  "address": 57355,
+  "call": "async_set_native_value(0)",
+  "entity": "StorageCommandTimeout",
+  "payload": [
+   0,
+   0
+  ]
+ },
+ {
+  "address": 57355,
+  "call": "async_set_native_value(12.5)",
+  "entity": "StorageCommandTimeout",
+  "payload": [
+   12,
+   0
+  ]
+ },
+ {
+  "address": 57355,
+  "call": "async_set_native_value(86400)",
+  "entity": "StorageCommandTimeout",
+  "payload": [
+   20864,
+   1
+  ]
+ },
+ {
+  "address": 57358,
+  "call": "async_set_native_value(0)",
+  "entity": "StorageChargeLimit",
+  "payload": [
+   0,
+   0
+  ]
+ },
+ {
+  "address": 57358,
+  "call": "async_set_native_value(12.5)",
+  "entity": "StorageChargeLimit",
+  "payload": [
+   0,
+   16704
+  ]
+ },
+ {
+  "address": 57358,
+  "call": "async_set_native_value(1000000)",
+  "entity": "StorageChargeLimit",
+  "payload": [
+   9216,
+   18804
+  ]
+ },
+ {
+  "address": 57360,
+  "call": "async_set_native_value(0)",
+  "entity": "StorageDischargeLimit",
+  "payload": [
+   0,
+   0
+  ]
+ },
+ {
+  "address": 57360,
+  "call": "async_set_native_value(12.5)",
+  "entity": "StorageDischargeLimit",
+  "payload": [
+   0,
+   16704
+  ]
+ },
+ {
+  "address": 57360,
+  "call": "async_set_native_value(1000000)",
+  "entity": "StorageDischargeLimit",
+  "payload": [
+   9216,
+   18804
+  ]
+ },
+ {
+  "address": 57346,
+  "call": "async_set_native_value(0)",
+  "entity": "SolarEdgeSiteLimit",
+  "payload": [
+   0,
+   0
+  ]
+ },
+ {
+  "address": 57346,
+  "call": "async_set_native_value(12.5)",
+  "entity": "SolarEdgeSiteLimit",
+  "payload": [
+   0,
+   16704
+  ]
+ },
+ {
+  "address": 57346,
+  "call": "async_set_native_value(1000000)",
+  "entity": "SolarEdgeSiteLimit",
+  "payload": [
+   9216,
+   18804
+  ]
+ },
+ {
+  "address": 57362,
+  "call": "async_set_native_value(0)",
+  "entity": "SolarEdgeExternalProductionMax",
+  "payload": [
+   0,
+   0
+  ]
+ },
+ {
+  "address": 57362,
+  "call": "async_set_native_value(12.5)",
+  "entity": "SolarEdgeExternalProductionMax",
+  "payload": [
+   0,
+   16704
+  ]
+ },
+ {
+  "address": 57362,
+  "call": "async_set_native_value(1000000)",
+  "entity": "SolarEdgeExternalProductionMax",
+  "payload": [
+   9216,
+   18804
+  ]
+ },
+ {
+  "address": 61441,
+  "call": "async_set_native_value(0)",
+  "entity": "SolarEdgeActivePowerLimitSet",
+  "payload": [
+   0
+  ]
+ },
+ {
+  "address": 61441,
+  "call": "async_set_native_value(12.5)",
+  "entity": "SolarEdgeActivePowerLimitSet",
+  "payload": [
+   12
+  ]
+ },
+ {
+  "address": 61441,
+  "call": "async_set_native_value(100)",
+  "entity": "SolarEdgeActivePowerLimitSet",
+  "payload": [
+   100
+  ]
+ },
+ {
+  "address": 61442,
+  "call": "async_set_native_value(-1.0)",
+  "entity": "SolarEdgeCosPhiSet",
+  "payload": [
+   0,
+   49024
+  ]
+ },
+ {
+  "address": 61442,
+  "call": "async_set_native_value(0)",
+  "entity": "SolarEdgeCosPhiSet",
+  "payload": [
+   0,
+   0
+  ]
+ },
+ {
+  "address": 61442,
+  "call": "async_set_native_value(0.95)",
+  "entity": "SolarEdgeCosPhiSet",
+  "payload": [
+   13107,
+   16243
+  ]
+ },
+ {
+  "address": 61442,
+  "call": "async_set_native_value(1.0)",
+  "entity": "SolarEdgeCosPhiSet",
+  "payload": [
+   0,
+   16256
+  ]
+ },
+ {
+  "address": 61760,
+  "call": "async_set_native_value(0)",
+  "entity": "SolarEdgePowerReduce",
+  "payload": [
+   0,
+   0
+  ]
+ },
+ {
+  "address": 61760,
+  "call": "async_set_native_value(12.5)",
+  "entity": "SolarEdgePowerReduce",
+  "payload": [
+   0,
+   16712
+  ]
+ },
+ {
+  "address": 61760,
+  "call": "async_set_native_value(100)",
+  "entity": "SolarEdgePowerReduce",
+  "payload": [
+   0,
+   17096
+  ]
+ },
+ {
+  "address": 61838,
+  "call": "async_set_native_value(0)",
+  "entity": "SolarEdgeCurrentLimit",
+  "payload": [
+   0,
+   0
+  ]
+ },
+ {
+  "address": 61838,
+  "call": "async_set_native_value(12.5)",
+  "entity": "SolarEdgeCurrentLimit",
+  "payload": [
+   0,
+   16712
+  ]
+ },
+ {
+  "address": 61838,
+  "call": "async_set_native_value(256)",
+  "entity": "SolarEdgeCurrentLimit",
+  "payload": [
+   0,
+   17280
+  ]
+ },
+ {
+  "address": 57348,
+  "call": "async_select_option('Disabled')",
+  "entity": "StorageControlMode",
+  "payload": [
+   0
+  ]
+ },
+ {
+  "address": 57348,
+  "call": "async_select_option('Maximize Self Consumption')",
+  "entity": "StorageControlMode",
+  "payload": [
+   1
+  ]
+ },
+ {
+  "address": 57348,
+  "call": "async_select_option('Time of Use')",
+  "entity": "StorageControlMode",
+  "payload": [
+   2
+  ]
+ },
+ {
+  "address": 57348,
+  "call": "async_select_option('Backup Only')",
+  "entity": "StorageControlMode",
+  "payload": [
+   3
+  ]
+ },
+ {
+  "address": 57348,
+  "call": "async_select_option('Remote Control')",
+  "entity": "StorageControlMode",
+  "payload": [
+   4
+  ]
+ },
+ {
+  "address": 57349,
+  "call": "async_select_option('Disabled')",
+  "entity": "StorageACChargePolicy",
+  "payload": [
+   0
+  ]
+ },
+ {
+  "address": 57349,
+  "call": "async_select_option('Always Allowed')",
+  "entity": "StorageACChargePolicy",
+  "payload": [
+   1
+  ]
+ },
+ {
+  "address": 57349,
+  "call": "async_select_option('Fixed Energy Limit')",
+  "entity": "StorageACChargePolicy",
+  "payload": [
+   2
+  ]
+ },
+ {
+  "address": 57349,
+  "call": "async_select_option('Percent of Production')",
+  "entity": "StorageACChargePolicy",
+  "payload": [
+   3
+  ]
+ },
+ {
+  "address": 57354,
+  "call": "async_select_option('Solar Power Only (Off)')",
+  "entity": "StorageDefaultMode",
+  "payload": [
+   0
+  ]
+ },
+ {
+  "address": 57354,
+  "call": "async_select_option('Charge from Clipped Solar Power')",
+  "entity": "StorageDefaultMode",
+  "payload": [
+   1
+  ]
+ },
+ {
+  "address": 57354,
+  "call": "async_select_option('Charge from Solar Power')",
+  "entity": "StorageDefaultMode",
+  "payload": [
+   2
+  ]
+ },
+ {
+  "address": 57354,
+  "call": "async_select_option('Charge from Solar Power and Grid')",
+  "entity": "StorageDefaultMode",
+  "payload": [
+   3
+  ]
+ },
+ {
+  "address": 57354,
+  "call": "async_select_option('Discharge to Maximize Export')",
+  "entity": "StorageDefaultMode",
+  "payload": [
+   4
+  ]
+ },
+ {
+  "address": 57354,
+  "call": "async_select_option('Discharge to Minimize Import')",
+  "entity": "StorageDefaultMode",
+  "payload": [
+   5
+  ]
+ },
+ {
+  "address": 57354,
+  "call": "async_select_option('Maximize Self Consumption')",
+  "entity": "StorageDefaultMode",
+  "payload": [
+   7
+  ]
+ },
+ {
+  "address": 57357,
+  "call": "async_select_option('Solar Power Only (Off)')",
+  "entity": "StorageCommandMode",
+  "payload": [
+   0
+  ]
+ },
+ {
+  "address": 57357,
+  "call": "async_select_option('Charge from Clipped Solar Power')",
+  "entity": "StorageCommandMode",
+  "payload": [
+   1
+  ]
+ },
+ {
+  "address": 57357,
+  "call": "async_select_option('Charge from Solar Power')",
+  "entity": "StorageCommandMode",
+  "payload": [
+   2
+  ]
+ },
+ {
+  "address": 57357,
+  "call": "async_select_option('Charge from Solar Power and Grid')",
+  "entity": "StorageCommandMode",
+  "payload": [
+   3
+  ]
+ },
+ {
+  "address": 57357,
+  "call": "async_select_option('Discharge to Maximize Export')",
+  "entity": "StorageCommandMode",
+  "payload": [
+   4
+  ]
+ },
+ {
+  "address": 57357,
+  "call": "async_select_option('Discharge to Minimize Import')",
+  "entity": "StorageCommandMode",
+  "payload": [
+   5
+  ]
+ },
+ {
+  "address": 57357,
+  "call": "async_select_option('Maximize Self Consumption')",
+  "entity": "StorageCommandMode",
+  "payload": [
+   7
+  ]
+ },
+ {
+  "address": 57345,
+  "call": "async_select_option('Total')",
+  "entity": "SolaredgeLimitControl",
+  "payload": [
+   0
+  ]
+ },
+ {
+  "address": 57345,
+  "call": "async_select_option('Per Phase')",
+  "entity": "SolaredgeLimitControl",
+  "payload": [
+   1
+  ]
+ },
+ {
+  "address": 61700,
+  "call": "async_select_option('Fixed CosPhi')",
+  "entity": "SolarEdgeReactivePowerMode",
+  "payload": [
+   0,
+   0
+  ]
+ },
+ {
+  "address": 61700,
+  "call": "async_select_option('Fixed Q')",
+  "entity": "SolarEdgeReactivePowerMode",
+  "payload": [
+   1,
+   0
+  ]
+ },
+ {
+  "address": 61700,
+  "call": "async_select_option('CosPhi(P)')",
+  "entity": "SolarEdgeReactivePowerMode",
+  "payload": [
+   2,
+   0
+  ]
+ },
+ {
+  "address": 61700,
+  "call": "async_select_option('Q(U) + Q(P)')",
+  "entity": "SolarEdgeReactivePowerMode",
+  "payload": [
+   3,
+   0
+  ]
+ },
+ {
+  "address": 61700,
+  "call": "async_select_option('RRCR')",
+  "entity": "SolarEdgeReactivePowerMode",
+  "payload": [
+   4,
+   0
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_select_option('Disabled') @ E_Lim_Ctl_Mode=0x0000",
+  "entity": "SolaredgeLimitControlMode",
+  "payload": [
+   0
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_select_option('Export Control (Export/Import Meter)') @ E_Lim_Ctl_Mode=0x0000",
+  "entity": "SolaredgeLimitControlMode",
+  "payload": [
+   1
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_select_option('Export Control (Consumption Meter)') @ E_Lim_Ctl_Mode=0x0000",
+  "entity": "SolaredgeLimitControlMode",
+  "payload": [
+   2
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_select_option('Production Control') @ E_Lim_Ctl_Mode=0x0000",
+  "entity": "SolaredgeLimitControlMode",
+  "payload": [
+   4
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_select_option('Disabled') @ E_Lim_Ctl_Mode=0x0c07",
+  "entity": "SolaredgeLimitControlMode",
+  "payload": [
+   3072
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_select_option('Export Control (Export/Import Meter)') @ E_Lim_Ctl_Mode=0x0c07",
+  "entity": "SolaredgeLimitControlMode",
+  "payload": [
+   3073
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_select_option('Export Control (Consumption Meter)') @ E_Lim_Ctl_Mode=0x0c07",
+  "entity": "SolaredgeLimitControlMode",
+  "payload": [
+   3074
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_select_option('Production Control') @ E_Lim_Ctl_Mode=0x0c07",
+  "entity": "SolaredgeLimitControlMode",
+  "payload": [
+   3076
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_turn_on() @ E_Lim_Ctl_Mode=0x0000",
+  "entity": "SolarEdgeExternalProduction",
+  "payload": [
+   1024
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_turn_off() @ E_Lim_Ctl_Mode=0x0000",
+  "entity": "SolarEdgeExternalProduction",
+  "payload": [
+   0
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_turn_on() @ E_Lim_Ctl_Mode=0x0c07",
+  "entity": "SolarEdgeExternalProduction",
+  "payload": [
+   3079
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_turn_off() @ E_Lim_Ctl_Mode=0x0c07",
+  "entity": "SolarEdgeExternalProduction",
+  "payload": [
+   2055
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_turn_on() @ E_Lim_Ctl_Mode=0x0000",
+  "entity": "SolarEdgeNegativeSiteLimit",
+  "payload": [
+   2048
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_turn_off() @ E_Lim_Ctl_Mode=0x0000",
+  "entity": "SolarEdgeNegativeSiteLimit",
+  "payload": [
+   0
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_turn_on() @ E_Lim_Ctl_Mode=0x0c07",
+  "entity": "SolarEdgeNegativeSiteLimit",
+  "payload": [
+   3079
+  ]
+ },
+ {
+  "address": 57344,
+  "call": "async_turn_off() @ E_Lim_Ctl_Mode=0x0c07",
+  "entity": "SolarEdgeNegativeSiteLimit",
+  "payload": [
+   1031
+  ]
+ },
+ {
+  "address": 61762,
+  "call": "async_turn_on()",
+  "entity": "SolarEdgeGridControl",
+  "payload": [
+   1,
+   0
+  ]
+ },
+ {
+  "address": 61762,
+  "call": "async_turn_off()",
+  "entity": "SolarEdgeGridControl",
+  "payload": [
+   0,
+   0
+  ]
+ },
+ {
+  "address": 61696,
+  "call": "async_press()",
+  "entity": "SolarEdgeCommitControlSettings",
+  "payload": [
+   1
+  ]
+ },
+ {
+  "address": 61697,
+  "call": "async_press()",
+  "entity": "SolarEdgeDefaultControlSettings",
+  "payload": [
+   1
+  ]
+ }
+]

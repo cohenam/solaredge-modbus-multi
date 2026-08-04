@@ -17,7 +17,7 @@ from tests.fake_modbus_server import FakeModbusServer
 
 
 @pytest.fixture(autouse=True)
-def _allow_sockets(socket_enabled):
+def _module_allows_sockets(_allow_sockets):
     """These tests intentionally use real localhost sockets."""
     yield
 
@@ -31,19 +31,6 @@ def solaredge_header_space() -> dict[int, int]:
 def other_device_space() -> dict[int, int]:
     registers = [0x5375, 0x6E53, 1, 65] + string_registers("WattNode", 5)
     return {40000 + offset: value for offset, value in enumerate(registers)}
-
-
-@pytest.fixture
-def make_server():
-    servers: list[FakeModbusServer] = []
-
-    async def _make(**kwargs) -> FakeModbusServer:
-        server = FakeModbusServer(**kwargs)
-        await server.start()
-        servers.append(server)
-        return server
-
-    yield _make
 
 
 def make_scanner(server: FakeModbusServer, **kwargs) -> SolarEdgeDeviceScanner:
@@ -229,16 +216,14 @@ async def test_transport_write_is_atomic_function_16(make_server) -> None:
         host="127.0.0.1",
         port=server.port,
         timeout=1,
-        retries=0,
-        reconnect_delay=0,
-        reconnect_delay_max=0,
     )
     try:
         await transport.connect()
-        result = await transport.write_registers_raw(1, 57348, [1, 17274, 17530])
-        assert not result.isError()
+        # Success is the absence of a raise now: write_registers_raw returns
+        # nothing and reports every failure through our exception hierarchy.
+        await transport.write_registers_raw(1, 57348, [1, 17274, 17530])
     finally:
-        await transport.disconnect(clear_client=True)
+        await transport.recycle()
         await server.stop()
 
     assert server.writes == [(1, 57348, [1, 17274, 17530])]

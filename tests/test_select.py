@@ -34,24 +34,6 @@ from custom_components.solaredge_modbus_multi.select import (
 
 
 @pytest.fixture
-def mock_coordinator():
-    """Create a mock coordinator."""
-    coordinator = MagicMock()
-    coordinator.async_add_listener = MagicMock()
-    coordinator.data = {}
-    return coordinator
-
-
-@pytest.fixture
-def mock_config_entry():
-    """Create a mock config entry."""
-    entry = MagicMock()
-    entry.entry_id = "test_entry_123"
-    entry.data = {"name": "Test SolarEdge"}
-    return entry
-
-
-@pytest.fixture
 def mock_inverter_platform():
     """Create a mock inverter platform with storage control capabilities."""
     platform = MagicMock()
@@ -163,6 +145,7 @@ class TestAsyncSetupEntry:
         mock_hub.option_storage_control = False
         mock_hub.option_site_limit_control = False
         mock_hub.option_detect_extras = False
+        mock_inverter_platform.apc_may_be_supported = False
 
         added_entities = []
 

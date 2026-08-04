@@ -72,6 +72,7 @@
           "detect_meters": "Automatisk oppdagelse av målere",
           "detect_batteries": "Automatisk gjenkjenning av batterier",
           "detect_extras": "Automatisk oppdage flere enheter",
+          "allow_hardware_writes": "Tillat maskinvareskriving (Modbus-skrivekommandoer)",
           "advanced_power_control": "Strømkontrollalternativer",
           "sleep_after_write": "Inverter Command Delay (sekunder)"
         }
@@ -88,7 +89,7 @@
         "title": "Batterialternativer",
         "data": {
           "allow_battery_energy_reset": "La batterienergien tilbakestilles",
-          "battery_energy_reset_cycles": "Oppdater sykluser for å tilbakestille batterienergi",
+          "battery_energy_reset_cycles": "Påfølgende lavere batteriavlesninger før en energitilbakestilling godtas",
           "battery_rating_adjust": "Justering av batterikapasitet (prosent)"
         }
       }

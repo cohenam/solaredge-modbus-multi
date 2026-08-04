@@ -20,8 +20,13 @@ from awesomeversion.exceptions import (
 )
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.entity import DeviceInfo
-from pymodbus.client.mixin import ModbusClientMixin
-from pymodbus.exceptions import ModbusIOException
+from modbus_connection.decode import (
+    decode_float32,
+    decode_int16,
+    decode_int32,
+    decode_uint32,
+    decode_uint64,
+)
 
 from .const import (
     BATTERY_REG_BASE,
@@ -29,6 +34,7 @@ from .const import (
     DOMAIN,
     METER_REG_BASE,
     STATUS_VENDOR4_VERSION,
+    PollGroup,
     SolarEdgeTimeouts,
     SunSpecNotImpl,
     detect_timeout_issue_id,
@@ -182,15 +188,28 @@ def drop_decoded(decoded: dict, keys) -> None:
         decoded.pop(key, None)
 
 
-def decode_sunspec_string(registers: list[int], word_order: str = "big") -> str:
-    """Decode a SunSpec string field from a span of UINT16 registers."""
-    return int_list_to_string(
-        ModbusClientMixin.convert_from_registers(
-            registers,
-            data_type=ModbusClientMixin.DATATYPE.UINT16,
-            word_order=word_order,
+def decode_fields(
+    fields: list[str], registers: list[int], decoder, size: int, **decoder_kwargs
+) -> dict:
+    """Decode consecutive `size`-register chunks into a {field: value} dict.
+
+    `registers` must hold exactly `size` registers per field (strict zip).
+    """
+    if size <= 0:
+        raise ValueError("Decode field size must be positive")
+
+    expected_registers = len(fields) * size
+    if len(registers) != expected_registers:
+        raise ValueError(
+            f"Expected {expected_registers} registers for {len(fields)} fields, "
+            f"got {len(registers)}"
         )
-    )
+
+    values = [
+        decoder(registers[i : i + size], **decoder_kwargs)
+        for i in range(0, len(registers), size)
+    ]
+    return dict(zip(fields, values, strict=True))
 
 
 def decode_sunspec_common_block(registers: list[int]) -> dict:
@@ -205,20 +224,17 @@ def decode_sunspec_common_block(registers: list[int]) -> dict:
     decoded = dict(
         zip(
             ["C_SunSpec_DID", "C_SunSpec_Length", "C_Device_address"],
-            ModbusClientMixin.convert_from_registers(
-                registers[0:2] + [registers[66]],
-                data_type=ModbusClientMixin.DATATYPE.UINT16,
-            ),
+            registers[0:2] + [registers[66]],
         )
     )
 
     decoded.update(
         {
-            "C_Manufacturer": decode_sunspec_string(registers[2:18]),  # string(32)
-            "C_Model": decode_sunspec_string(registers[18:34]),  # string(32)
-            "C_Option": decode_sunspec_string(registers[34:42]),  # string(16)
-            "C_Version": decode_sunspec_string(registers[42:50]),  # string(16)
-            "C_SerialNumber": decode_sunspec_string(registers[50:66]),  # string(32)
+            "C_Manufacturer": int_list_to_string(registers[2:18]),  # string(32)
+            "C_Model": int_list_to_string(registers[18:34]),  # string(32)
+            "C_Option": int_list_to_string(registers[34:42]),  # string(16)
+            "C_Version": int_list_to_string(registers[42:50]),  # string(16)
+            "C_SerialNumber": int_list_to_string(registers[50:66]),  # string(32)
         }
     )
 
@@ -240,10 +256,32 @@ class SolarEdgeInverter:
         self.has_battery = None
         self.global_power_control = None
         self.advanced_power_control = None
+        # Whether the capability probe has been attempted at all. Kept apart
+        # from the capability itself so an unresolved probe (a timeout) falls
+        # back to the settings cadence instead of retrying every cycle, while
+        # still not declaring a capability unsupported on one bad read.
+        self._gpc_probed = False
+        self._apc_probed = False
         self.site_limit_control = None
         self._grid_status = None
         self._last_update_timestamp = None
         self._use_status_vendor4 = False
+
+    @property
+    def gpc_may_be_supported(self) -> bool:
+        """Global power control is enabled and not ruled out by a probe.
+
+        None means undecided — entities are still created and probes still
+        run until an inverter verdict proves the capability absent.
+        """
+        return self.hub.option_detect_extras and self.global_power_control is not False
+
+    @property
+    def apc_may_be_supported(self) -> bool:
+        """Advanced power control is enabled and not ruled out by a probe."""
+        return (
+            self.hub.option_detect_extras and self.advanced_power_control is not False
+        )
 
     async def init_device(self) -> None:
         """Set up data about the device from modbus."""
@@ -256,10 +294,7 @@ class SolarEdgeInverter:
             # The inverter block has a 2-register C_SunSpec_ID header; the
             # rest is the standard common model starting at C_SunSpec_DID.
             self.decoded_common = {
-                "C_SunSpec_ID": ModbusClientMixin.convert_from_registers(
-                    inverter_data.registers[0:2],
-                    data_type=ModbusClientMixin.DATATYPE.UINT32,
-                ),
+                "C_SunSpec_ID": decode_uint32(inverter_data.registers[0:2]),
                 **decode_sunspec_common_block(inverter_data.registers[2:]),
             }
 
@@ -302,18 +337,9 @@ class SolarEdgeInverter:
             )
 
             self.decoded_mmppt = {
-                "mmppt_DID": ModbusClientMixin.convert_from_registers(
-                    [mmppt_common.registers[0]],
-                    data_type=ModbusClientMixin.DATATYPE.UINT16,
-                ),
-                "mmppt_Length": ModbusClientMixin.convert_from_registers(
-                    [mmppt_common.registers[1]],
-                    data_type=ModbusClientMixin.DATATYPE.UINT16,
-                ),
-                "mmppt_Units": ModbusClientMixin.convert_from_registers(
-                    [mmppt_common.registers[8]],
-                    data_type=ModbusClientMixin.DATATYPE.UINT16,
-                ),
+                "mmppt_DID": mmppt_common.registers[0],
+                "mmppt_Length": mmppt_common.registers[1],
+                "mmppt_Units": mmppt_common.registers[8],
             }
 
             for name, value in iter(self.decoded_mmppt.items()):
@@ -385,7 +411,7 @@ class SolarEdgeInverter:
             # C_Version: registers[0:8] (address 40044-40051). Static at runtime and
             # already decoded in init_device — skip the per-cycle re-decode.
             if "C_Version" not in self.decoded_common:
-                self.decoded_common["C_Version"] = decode_sunspec_string(
+                self.decoded_common["C_Version"] = int_list_to_string(
                     inverter_data.registers[0:8]
                 )
 
@@ -425,10 +451,7 @@ class SolarEdgeInverter:
                 dict(
                     zip(
                         uint16_fields,
-                        ModbusClientMixin.convert_from_registers(
-                            uint16_data,
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        ),
+                        uint16_data,
                         strict=True,
                     )
                 )
@@ -465,40 +488,28 @@ class SolarEdgeInverter:
             )
 
             self.decoded_model.update(
-                dict(
-                    zip(
-                        int16_fields,
-                        ModbusClientMixin.convert_from_registers(
-                            int16_data,
-                            data_type=ModbusClientMixin.DATATYPE.INT16,
-                        ),
-                        strict=True,
-                    )
-                )
+                decode_fields(int16_fields, int16_data, decode_int16, size=1)
             )
 
             self.decoded_model.update(
                 {
-                    "AC_Energy_WH": ModbusClientMixin.convert_from_registers(
-                        inverter_data.registers[49:51],
-                        data_type=ModbusClientMixin.DATATYPE.UINT32,
-                    ),
+                    "AC_Energy_WH": decode_uint32(inverter_data.registers[49:51]),
                 }
             )
 
-            if self.use_status_vendor4:
+            if self.use_status_vendor4 and self.hub.poll_due(PollGroup.STATUS):
                 inverter_data = await self.hub.modbus_read_holding_registers(
-                    unit=self.inverter_unit_id, address=40119, rcount=2
+                    unit=self.inverter_unit_id,
+                    address=40119,
+                    rcount=2,
+                    group=PollGroup.STATUS,
                 )
                 self.decoded_model.update(
                     dict(
                         [
                             (
                                 "I_Status_Vendor4",
-                                ModbusClientMixin.convert_from_registers(
-                                    inverter_data.registers[0:2],
-                                    data_type=ModbusClientMixin.DATATYPE.UINT32,
-                                ),
+                                decode_uint32(inverter_data.registers[0:2]),
                             ),
                         ]
                     )
@@ -517,7 +528,7 @@ class SolarEdgeInverter:
             )
 
         """ Multiple MPPT Extension """
-        if self.decoded_mmppt is not None:
+        if self.decoded_mmppt is not None and self.hub.poll_due(PollGroup.MMPPT):
             if self.decoded_mmppt["mmppt_Units"] == 2:
                 mmppt_registers = 48
                 mmppt_unit_ids = [0, 1]
@@ -534,7 +545,10 @@ class SolarEdgeInverter:
 
             try:
                 inverter_data = await self.hub.modbus_read_holding_registers(
-                    unit=self.inverter_unit_id, address=40123, rcount=mmppt_registers
+                    unit=self.inverter_unit_id,
+                    address=40123,
+                    rcount=mmppt_registers,
+                    group=PollGroup.MMPPT,
                 )
 
                 if self.decoded_mmppt["mmppt_Units"] in [2, 3]:
@@ -549,24 +563,12 @@ class SolarEdgeInverter:
                         inverter_data.registers[7]
                     ]
                     self.decoded_model.update(
-                        dict(
-                            zip(
-                                int16_fields,
-                                ModbusClientMixin.convert_from_registers(
-                                    int16_data,
-                                    data_type=ModbusClientMixin.DATATYPE.INT16,
-                                ),
-                                strict=True,
-                            )
-                        )
+                        decode_fields(int16_fields, int16_data, decode_int16, size=1)
                     )
 
                     self.decoded_model.update(
                         {
-                            "mmppt_Events": ModbusClientMixin.convert_from_registers(
-                                inverter_data.registers[4:6],
-                                data_type=ModbusClientMixin.DATATYPE.UINT32,
-                            ),
+                            "mmppt_Events": decode_uint32(inverter_data.registers[4:6]),
                         }
                     )
 
@@ -575,16 +577,12 @@ class SolarEdgeInverter:
 
                         mmppt_unit_data = {
                             "IDStr": int_list_to_string(  # string(16)
-                                ModbusClientMixin.convert_from_registers(
-                                    inverter_data.registers[
-                                        9 + unit_offset : 17 + unit_offset
-                                    ],
-                                    data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                )
+                                inverter_data.registers[
+                                    9 + unit_offset : 17 + unit_offset
+                                ]
                             ),
-                            "Tmp": ModbusClientMixin.convert_from_registers(
-                                [inverter_data.registers[24 + unit_offset]],
-                                data_type=ModbusClientMixin.DATATYPE.INT16,
+                            "Tmp": decode_int16(
+                                [inverter_data.registers[24 + unit_offset]]
                             ),
                         }
 
@@ -606,10 +604,7 @@ class SolarEdgeInverter:
                             dict(
                                 zip(
                                     uint16_fields,
-                                    ModbusClientMixin.convert_from_registers(
-                                        uint16_data,
-                                        data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                    ),
+                                    uint16_data,
                                     strict=True,
                                 )
                             )
@@ -630,15 +625,8 @@ class SolarEdgeInverter:
                             ]
                         )
                         mmppt_unit_data.update(
-                            dict(
-                                zip(
-                                    uint32_fields,
-                                    ModbusClientMixin.convert_from_registers(
-                                        uint32_data,
-                                        data_type=ModbusClientMixin.DATATYPE.UINT32,
-                                    ),
-                                    strict=True,
-                                )
+                            decode_fields(
+                                uint32_fields, uint32_data, decode_uint32, size=2
                             )
                         )
 
@@ -652,33 +640,25 @@ class SolarEdgeInverter:
                 )
 
         """ Global Dynamic Power Control and Status """
-        if (
-            self.hub.option_detect_extras is True
-            and (self.global_power_control is True or self.global_power_control is None)
-            and (self.hub.slow_poll_due or self.global_power_control is None)
+        if self.gpc_may_be_supported and (
+            self.hub.poll_due(PollGroup.SETTINGS) or not self._gpc_probed
         ):
+            self._gpc_probed = True
             try:
                 async with asyncio.timeout(SolarEdgeTimeouts.Read / 1000):
                     inverter_data = await self.hub.modbus_read_holding_registers(
-                        unit=self.inverter_unit_id, address=61440, rcount=4
+                        unit=self.inverter_unit_id,
+                        address=61440,
+                        rcount=4,
+                        group=PollGroup.SETTINGS,
                     )
 
                     self.decoded_model.update(
                         {
-                            "I_RRCR": ModbusClientMixin.convert_from_registers(
-                                [inverter_data.registers[0]],
-                                data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                word_order="little",
-                            ),
-                            "I_Power_Limit": ModbusClientMixin.convert_from_registers(
-                                [inverter_data.registers[1]],
-                                data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                word_order="little",
-                            ),
-                            "I_CosPhi": ModbusClientMixin.convert_from_registers(
-                                inverter_data.registers[2:4],
-                                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                                word_order="little",
+                            "I_RRCR": inverter_data.registers[0],
+                            "I_Power_Limit": inverter_data.registers[1],
+                            "I_CosPhi": decode_float32(
+                                inverter_data.registers[2:4], word_order="little"
                             ),
                         }
                     )
@@ -706,7 +686,11 @@ class SolarEdgeInverter:
                     f"I{self.inverter_unit_id}: global power control NOT available"
                 )
 
-            except (TimeoutError, ModbusIOException):
+            except (TimeoutError, ModbusIOError):
+                # Handled here, so the refresh still completes — but the
+                # settings data is stale, so the poll must not count as a
+                # served re-read.
+                self.hub.note_settings_read_incomplete()
                 ir.async_create_issue(
                     self.hub._hass,
                     DOMAIN,
@@ -725,28 +709,19 @@ class SolarEdgeInverter:
                     "will be unavailable."
                 )
 
-            except ModbusIOError:
-                raise ModbusReadError(
-                    f"No response from inverter ID {self.inverter_unit_id}"
-                )
-
-            finally:
-                await self.hub.connect()
-
         """ Advanced Power Control """
         """ Power Control Block """
-        if (
-            self.hub.option_detect_extras is True
-            and (
-                self.advanced_power_control is True
-                or self.advanced_power_control is None
-            )
-            and (self.hub.slow_poll_due or self.advanced_power_control is None)
+        if self.apc_may_be_supported and (
+            self.hub.poll_due(PollGroup.SETTINGS) or not self._apc_probed
         ):
+            self._apc_probed = True
             try:
                 async with asyncio.timeout(SolarEdgeTimeouts.Read / 1000):
                     inverter_data = await self.hub.modbus_read_holding_registers(
-                        unit=self.inverter_unit_id, address=61696, rcount=86
+                        unit=self.inverter_unit_id,
+                        address=61696,
+                        rcount=86,
+                        group=PollGroup.SETTINGS,
                     )
 
                     int32_fields = APC_INT32_FIELDS
@@ -756,16 +731,12 @@ class SolarEdgeInverter:
                         + inverter_data.registers[66:70]
                     )
                     self.decoded_model.update(
-                        dict(
-                            zip(
-                                int32_fields,
-                                ModbusClientMixin.convert_from_registers(
-                                    int32_data,
-                                    data_type=ModbusClientMixin.DATATYPE.INT32,
-                                    word_order="little",
-                                ),
-                                strict=True,
-                            )
+                        decode_fields(
+                            int32_fields,
+                            int32_data,
+                            decode_int32,
+                            size=2,
+                            word_order="little",
                         )
                     )
 
@@ -774,35 +745,25 @@ class SolarEdgeInverter:
                         inverter_data.registers[10:66] + inverter_data.registers[70:86]
                     )
                     self.decoded_model.update(
-                        dict(
-                            zip(
-                                float32_fields,
-                                ModbusClientMixin.convert_from_registers(
-                                    float32_data,
-                                    data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                                    word_order="little",
-                                ),
-                                strict=True,
-                            )
+                        decode_fields(
+                            float32_fields,
+                            float32_data,
+                            decode_float32,
+                            size=2,
+                            word_order="little",
                         )
                     )
 
                     self.decoded_model.update(
                         {
-                            "CommitPwrCtlSettings": ModbusClientMixin.convert_from_registers(
-                                [inverter_data.registers[0]],
-                                data_type=ModbusClientMixin.DATATYPE.INT16,
-                                word_order="little",
+                            "CommitPwrCtlSettings": decode_int16(
+                                [inverter_data.registers[0]]
                             ),
-                            "RestorePwrCtlDefaults": ModbusClientMixin.convert_from_registers(
-                                [inverter_data.registers[1]],
-                                data_type=ModbusClientMixin.DATATYPE.INT16,
-                                word_order="little",
+                            "RestorePwrCtlDefaults": decode_int16(
+                                [inverter_data.registers[1]]
                             ),
-                            "ReactPwrIterTime": ModbusClientMixin.convert_from_registers(
-                                inverter_data.registers[6:8],
-                                data_type=ModbusClientMixin.DATATYPE.UINT32,
-                                word_order="little",
+                            "ReactPwrIterTime": decode_uint32(
+                                inverter_data.registers[6:8], word_order="little"
                             ),
                         }
                     )
@@ -819,16 +780,12 @@ class SolarEdgeInverter:
                         + inverter_data.registers[56:84]
                     )
                     self.decoded_model.update(
-                        dict(
-                            zip(
-                                float32_fields,
-                                ModbusClientMixin.convert_from_registers(
-                                    float32_data,
-                                    data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                                    word_order="little",
-                                ),
-                                strict=True,
-                            )
+                        decode_fields(
+                            float32_fields,
+                            float32_data,
+                            decode_float32,
+                            size=2,
+                            word_order="little",
                         )
                     )
 
@@ -837,16 +794,12 @@ class SolarEdgeInverter:
                         inverter_data.registers[32:36] + inverter_data.registers[52:56]
                     )
                     self.decoded_model.update(
-                        dict(
-                            zip(
-                                uint32_fields,
-                                ModbusClientMixin.convert_from_registers(
-                                    uint32_data,
-                                    data_type=ModbusClientMixin.DATATYPE.UINT32,
-                                    word_order="little",
-                                ),
-                                strict=True,
-                            )
+                        decode_fields(
+                            uint32_fields,
+                            uint32_data,
+                            decode_uint32,
+                            size=2,
+                            word_order="little",
                         )
                     )
 
@@ -873,7 +826,11 @@ class SolarEdgeInverter:
                     f"I{self.inverter_unit_id}: advanced power control NOT available"
                 )
 
-            except (TimeoutError, ModbusIOException):
+            except (TimeoutError, ModbusIOError):
+                # Handled here, so the refresh still completes — but the
+                # settings data is stale, so the poll must not count as a
+                # served re-read.
+                self.hub.note_settings_read_incomplete()
                 ir.async_create_issue(
                     self.hub._hass,
                     DOMAIN,
@@ -892,42 +849,29 @@ class SolarEdgeInverter:
                     "will be unavailable."
                 )
 
-            except ModbusIOError:
-                raise ModbusReadError(
-                    f"No response from inverter ID {self.inverter_unit_id}"
-                )
-
-            finally:
-                await self.hub.connect()
-
         """ Power Control Options: Site Limit Control """
         if (
             self.hub.option_site_limit_control is True
             and self.site_limit_control is not False
-            and (self.hub.slow_poll_due or self.site_limit_control is None)
+            and (
+                self.hub.poll_due(PollGroup.SETTINGS) or self.site_limit_control is None
+            )
         ):
             """Site Limit and Mode"""
             try:
                 inverter_data = await self.hub.modbus_read_holding_registers(
-                    unit=self.inverter_unit_id, address=57344, rcount=4
+                    unit=self.inverter_unit_id,
+                    address=57344,
+                    rcount=4,
+                    group=PollGroup.SETTINGS,
                 )
 
                 self.decoded_model.update(
                     {
-                        "E_Lim_Ctl_Mode": ModbusClientMixin.convert_from_registers(
-                            [inverter_data.registers[0]],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                            word_order="little",
-                        ),
-                        "E_Lim_Ctl": ModbusClientMixin.convert_from_registers(
-                            [inverter_data.registers[1]],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                            word_order="little",
-                        ),
-                        "E_Site_Limit": ModbusClientMixin.convert_from_registers(
-                            inverter_data.registers[2:4],
-                            data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                            word_order="little",
+                        "E_Lim_Ctl_Mode": inverter_data.registers[0],
+                        "E_Lim_Ctl": inverter_data.registers[1],
+                        "E_Site_Limit": decode_float32(
+                            inverter_data.registers[2:4], word_order="little"
                         ),
                     }
                 )
@@ -948,26 +892,25 @@ class SolarEdgeInverter:
 
             """ External Production Max Power """
             try:
+                # Its own try block: this can succeed on an inverter that
+                # rejected the site-limit read above.
                 inverter_data = await self.hub.modbus_read_holding_registers(
-                    unit=self.inverter_unit_id, address=57362, rcount=2
+                    unit=self.inverter_unit_id,
+                    address=57362,
+                    rcount=2,
+                    group=PollGroup.SETTINGS,
                 )
 
                 self.decoded_model.update(
                     {
-                        "Ext_Prod_Max": ModbusClientMixin.convert_from_registers(
-                            inverter_data.registers[0:2],
-                            data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                            word_order="little",
+                        "Ext_Prod_Max": decode_float32(
+                            inverter_data.registers[0:2], word_order="little"
                         ),
                     }
                 )
 
             except (ModbusIllegalAddress, ModbusIllegalFunction, ModbusIllegalValue):
-                try:
-                    del self.decoded_model["Ext_Prod_Max"]
-                except KeyError:
-                    pass
-
+                drop_decoded(self.decoded_model, ("Ext_Prod_Max",))
                 _LOGGER.debug(f"I{self.inverter_unit_id}: Ext_Prod_Max NOT available")
 
             except ModbusIOError:
@@ -976,18 +919,23 @@ class SolarEdgeInverter:
                 )
 
         """ Grid On/Off Status """
-        if self._grid_status is not False:
+        # `is None` keeps the availability probe on the first cycle; after
+        # that the block follows the status cadence.
+        if self._grid_status is not False and (
+            self.hub.poll_due(PollGroup.STATUS) or self._grid_status is None
+        ):
             try:
                 inverter_data = await self.hub.modbus_read_holding_registers(
-                    unit=self.inverter_unit_id, address=40113, rcount=2
+                    unit=self.inverter_unit_id,
+                    address=40113,
+                    rcount=2,
+                    group=PollGroup.STATUS,
                 )
 
                 self.decoded_model.update(
                     {
-                        "I_Grid_Status": ModbusClientMixin.convert_from_registers(
-                            inverter_data.registers[0:2],
-                            data_type=ModbusClientMixin.DATATYPE.UINT32,
-                            word_order="little",
+                        "I_Grid_Status": decode_uint32(
+                            inverter_data.registers[0:2], word_order="little"
                         ),
                     }
                 )
@@ -998,7 +946,7 @@ class SolarEdgeInverter:
                 drop_decoded(self.decoded_model, GRID_STATUS_DECODED_KEYS)
                 _LOGGER.debug(f"I{self.inverter_unit_id}: Grid On/Off NOT available")
 
-            except ModbusIOException as e:
+            except ModbusIOError as e:
                 drop_decoded(self.decoded_model, GRID_STATUS_DECODED_KEYS)
                 _LOGGER.debug(
                     f"I{self.inverter_unit_id}: A modbus I/O exception occurred "
@@ -1006,21 +954,16 @@ class SolarEdgeInverter:
                     f"will be unavailable: {e}"
                 )
 
-            except ModbusIOError:
-                raise ModbusReadError(
-                    f"No response from inverter ID {self.inverter_unit_id}"
-                )
-
-            finally:
-                await self.hub.connect()
-
         log_decoded(f"I{self.inverter_unit_id}", self.decoded_model)
 
         """ Power Control Options: Storage Control """
         if (
             self.hub.option_storage_control is True
             and self.decoded_storage_control is not False
-            and (self.hub.slow_poll_due or self.decoded_storage_control is None)
+            and (
+                self.hub.poll_due(PollGroup.SETTINGS)
+                or self.decoded_storage_control is None
+            )
         ):
             if self.has_battery is None:
                 self.has_battery = False
@@ -1030,7 +973,10 @@ class SolarEdgeInverter:
 
             try:
                 inverter_data = await self.hub.modbus_read_holding_registers(
-                    unit=self.inverter_unit_id, address=57348, rcount=14
+                    unit=self.inverter_unit_id,
+                    address=57348,
+                    rcount=14,
+                    group=PollGroup.SETTINGS,
                 )
 
                 uint16_fields = [
@@ -1047,11 +993,7 @@ class SolarEdgeInverter:
                 self.decoded_storage_control = dict(
                     zip(
                         uint16_fields,
-                        ModbusClientMixin.convert_from_registers(
-                            uint16_data,
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                            word_order="little",
-                        ),
+                        uint16_data,
                         strict=True,
                     )
                 )
@@ -1066,25 +1008,19 @@ class SolarEdgeInverter:
                     inverter_data.registers[2:6] + inverter_data.registers[10:14]
                 )
                 self.decoded_storage_control.update(
-                    dict(
-                        zip(
-                            float32_fields,
-                            ModbusClientMixin.convert_from_registers(
-                                float32_data,
-                                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                                word_order="little",
-                            ),
-                            strict=True,
-                        )
+                    decode_fields(
+                        float32_fields,
+                        float32_data,
+                        decode_float32,
+                        size=2,
+                        word_order="little",
                     )
                 )
 
                 self.decoded_storage_control.update(
                     {
-                        "command_timeout": ModbusClientMixin.convert_from_registers(
-                            inverter_data.registers[7:9],
-                            data_type=ModbusClientMixin.DATATYPE.UINT32,
-                            word_order="little",
+                        "command_timeout": decode_uint32(
+                            inverter_data.registers[7:9], word_order="little"
                         ),
                     }
                 )
@@ -1229,10 +1165,6 @@ class SolarEdgeMeter:
                 address=self.start_address,
                 rcount=67,
             )
-            if meter_info.isError():
-                _LOGGER.debug(meter_info)
-                raise ModbusReadError(meter_info)
-
             # Standard SunSpec common model, starting directly at C_SunSpec_DID
             # (meters have no C_SunSpec_ID header).
             self.decoded_common = decode_sunspec_common_block(meter_info.registers)
@@ -1287,17 +1219,11 @@ class SolarEdgeMeter:
                 [
                     (
                         "C_SunSpec_DID",
-                        ModbusClientMixin.convert_from_registers(
-                            [meter_data.registers[0]],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        ),
+                        meter_data.registers[0],
                     ),
                     (
                         "C_SunSpec_Length",
-                        ModbusClientMixin.convert_from_registers(
-                            [meter_data.registers[1]],
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        ),
+                        meter_data.registers[1],
                     ),
                 ]
             )
@@ -1350,15 +1276,7 @@ class SolarEdgeMeter:
                 + [meter_data.registers[104]]
             )
             self.decoded_model.update(
-                dict(
-                    zip(
-                        int16_fields,
-                        ModbusClientMixin.convert_from_registers(
-                            int16_data,
-                            data_type=ModbusClientMixin.DATATYPE.INT16,
-                        ),
-                    )
-                )
+                decode_fields(int16_fields, int16_data, decode_int16, size=1)
             )
 
             uint32_fields = [
@@ -1403,15 +1321,7 @@ class SolarEdgeMeter:
                 + meter_data.registers[105:107]
             )
             self.decoded_model.update(
-                dict(
-                    zip(
-                        uint32_fields,
-                        ModbusClientMixin.convert_from_registers(
-                            uint32_data,
-                            data_type=ModbusClientMixin.DATATYPE.UINT32,
-                        ),
-                    )
-                )
+                decode_fields(uint32_fields, uint32_data, decode_uint32, size=2)
             )
 
         except ModbusIOError:
@@ -1481,6 +1391,7 @@ class SolarEdgeBattery:
         self.inverter_common = self.hub.inverter_common[self.inverter_unit_id]
         self._via_device = None
         self._last_update_timestamp = None
+        self._sample_generation = 0
 
         try:
             self.start_address = BATTERY_REG_BASE[self.battery_id]
@@ -1497,27 +1408,21 @@ class SolarEdgeBattery:
             # B_-prefixed names, little word order, no Option, and a
             # trailing float32 rated-energy field.
             self.decoded_common = {
-                "B_Manufacturer": decode_sunspec_string(  # string(32)
-                    battery_info.registers[0:16], word_order="little"
+                "B_Manufacturer": int_list_to_string(  # string(32)
+                    battery_info.registers[0:16]
                 ),
-                "B_Model": decode_sunspec_string(  # string(32)
-                    battery_info.registers[16:32], word_order="little"
+                "B_Model": int_list_to_string(  # string(32)
+                    battery_info.registers[16:32]
                 ),
-                "B_Version": decode_sunspec_string(  # string(32)
-                    battery_info.registers[32:48], word_order="little"
+                "B_Version": int_list_to_string(  # string(32)
+                    battery_info.registers[32:48]
                 ),
-                "B_SerialNumber": decode_sunspec_string(  # string(32)
-                    battery_info.registers[48:64], word_order="little"
+                "B_SerialNumber": int_list_to_string(  # string(32)
+                    battery_info.registers[48:64]
                 ),
-                "B_Device_Address": ModbusClientMixin.convert_from_registers(
-                    [battery_info.registers[64]],
-                    data_type=ModbusClientMixin.DATATYPE.UINT16,
-                    word_order="little",
-                ),
-                "B_RatedEnergy": ModbusClientMixin.convert_from_registers(
-                    battery_info.registers[66:68],
-                    data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                    word_order="little",
+                "B_Device_Address": battery_info.registers[64],
+                "B_RatedEnergy": decode_float32(
+                    battery_info.registers[66:68], word_order="little"
                 ),
             }
 
@@ -1600,15 +1505,12 @@ class SolarEdgeBattery:
                 + battery_data.registers[40:50]
                 + battery_data.registers[58:66]
             )
-            self.decoded_model = dict(
-                zip(
-                    float32_fields,
-                    ModbusClientMixin.convert_from_registers(
-                        float32_data,
-                        data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                        word_order="little",
-                    ),
-                )
+            self.decoded_model = decode_fields(
+                float32_fields,
+                float32_data,
+                decode_float32,
+                size=2,
+                word_order="little",
             )
 
             uint64_fields = [
@@ -1617,30 +1519,24 @@ class SolarEdgeBattery:
             ]
             uint64_data = battery_data.registers[50:58]
             self.decoded_model.update(
-                dict(
-                    zip(
-                        uint64_fields,
-                        ModbusClientMixin.convert_from_registers(
-                            uint64_data,
-                            data_type=ModbusClientMixin.DATATYPE.UINT64,
-                            word_order="little",
-                        ),
-                    )
+                decode_fields(
+                    uint64_fields,
+                    uint64_data,
+                    decode_uint64,
+                    size=4,
+                    word_order="little",
                 )
             )
 
             uint32_fields = ["B_Status", "B_Status_Vendor"]
             uint32_data = battery_data.registers[66:70]
             self.decoded_model.update(
-                dict(
-                    zip(
-                        uint32_fields,
-                        ModbusClientMixin.convert_from_registers(
-                            uint32_data,
-                            data_type=ModbusClientMixin.DATATYPE.UINT32,
-                            word_order="little",
-                        ),
-                    )
+                decode_fields(
+                    uint32_fields,
+                    uint32_data,
+                    decode_uint32,
+                    size=2,
+                    word_order="little",
                 )
             )
 
@@ -1667,11 +1563,7 @@ class SolarEdgeBattery:
                 dict(
                     zip(
                         uint16_fields,
-                        ModbusClientMixin.convert_from_registers(
-                            uint16_data,
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                            word_order="little",
-                        ),
+                        uint16_data,
                     )
                 )
             )
@@ -1681,10 +1573,20 @@ class SolarEdgeBattery:
                 f"No response from inverter ID {self.inverter_unit_id}"
             )
 
+        # Only a completed read counts as a new sample. Energy sensors that
+        # detect a counter reset gate their per-sample bookkeeping on this, so
+        # skipped poll cycles and repeated property reads cannot inflate it.
+        self._sample_generation += 1
+
         log_decoded(f"I{self.inverter_unit_id}B{self.battery_id}", self.decoded_model)
 
     def set_last_update(self, timestamp) -> None:
         self._last_update_timestamp = timestamp
+
+    @property
+    def sample_generation(self) -> int:
+        """Monotonic count of completed reads of this battery's block."""
+        return self._sample_generation
 
     @property
     def online(self) -> bool:
@@ -1751,10 +1653,7 @@ class SolarEdgeEVSE:
                 [
                     (
                         "C_SunSpec_ID",
-                        ModbusClientMixin.convert_from_registers(
-                            evse_data.registers[0:2],
-                            data_type=ModbusClientMixin.DATATYPE.UINT32,
-                        ),
+                        decode_uint32(evse_data.registers[0:2]),
                     )
                 ]
             )
@@ -1769,10 +1668,7 @@ class SolarEdgeEVSE:
                 dict(
                     zip(
                         uint16_fields,
-                        ModbusClientMixin.convert_from_registers(
-                            uint16_data,
-                            data_type=ModbusClientMixin.DATATYPE.UINT16,
-                        ),
+                        uint16_data,
                     )
                 )
             )
@@ -1782,48 +1678,23 @@ class SolarEdgeEVSE:
                     [
                         (
                             "C_Manufacturer",  # string(32)
-                            int_list_to_string(
-                                ModbusClientMixin.convert_from_registers(
-                                    evse_data.registers[4:20],
-                                    data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                )
-                            ),
+                            int_list_to_string(evse_data.registers[4:20]),
                         ),
                         (
                             "C_Model",  # string(32)
-                            int_list_to_string(
-                                ModbusClientMixin.convert_from_registers(
-                                    evse_data.registers[20:36],
-                                    data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                )
-                            ),
+                            int_list_to_string(evse_data.registers[20:36]),
                         ),
                         (
                             "C_Option",  # string(16)
-                            int_list_to_string(
-                                ModbusClientMixin.convert_from_registers(
-                                    evse_data.registers[36:44],
-                                    data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                )
-                            ),
+                            int_list_to_string(evse_data.registers[36:44]),
                         ),
                         (
                             "C_Version",  # string(16)
-                            int_list_to_string(
-                                ModbusClientMixin.convert_from_registers(
-                                    evse_data.registers[44:52],
-                                    data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                )
-                            ),
+                            int_list_to_string(evse_data.registers[44:52]),
                         ),
                         (
                             "C_SerialNumber",  # string(32)
-                            int_list_to_string(
-                                ModbusClientMixin.convert_from_registers(
-                                    evse_data.registers[52:68],
-                                    data_type=ModbusClientMixin.DATATYPE.UINT16,
-                                )
-                            ),
+                            int_list_to_string(evse_data.registers[52:68]),
                         ),
                     ]
                 )
@@ -1872,10 +1743,7 @@ class SolarEdgeEVSE:
             )
 
             self.decoded_common["C_Version"] = int_list_to_string(
-                ModbusClientMixin.convert_from_registers(
-                    evse_data.registers[0:8],
-                    data_type=ModbusClientMixin.DATATYPE.UINT16,
-                )
+                evse_data.registers[0:8]
             )
 
             log_decoded(f"E{self.evse_unit_id}", self.decoded_model)

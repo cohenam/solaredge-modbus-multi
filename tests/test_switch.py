@@ -20,24 +20,6 @@ from custom_components.solaredge_modbus_multi.switch import (
 
 
 @pytest.fixture
-def mock_coordinator():
-    """Create a mock coordinator."""
-    coordinator = MagicMock()
-    coordinator.async_add_listener = MagicMock()
-    coordinator.data = {}
-    return coordinator
-
-
-@pytest.fixture
-def mock_config_entry():
-    """Create a mock config entry."""
-    entry = MagicMock()
-    entry.entry_id = "test_entry_123"
-    entry.data = {"name": "Test SolarEdge"}
-    return entry
-
-
-@pytest.fixture
 def mock_inverter_platform():
     """Create a mock inverter platform with typical decoded data."""
     platform = MagicMock()
@@ -82,6 +64,7 @@ class TestAsyncSetupEntry:
         inverter = MagicMock()
         inverter.decoded_model = {"E_Lim_Ctl_Mode": 0x0000}
         inverter.advanced_power_control = False
+        inverter.apc_may_be_supported = False
         mock_hub.inverters = [inverter]
 
         mock_config_entry.runtime_data = SimpleNamespace(
@@ -106,6 +89,7 @@ class TestAsyncSetupEntry:
         inverter = MagicMock()
         inverter.decoded_model = {"E_Lim_Ctl_Mode": 0x0000, "AdvPwrCtrlEn": 0x0}
         inverter.advanced_power_control = True
+        inverter.apc_may_be_supported = True
         mock_hub.inverters = [inverter]
 
         mock_config_entry.runtime_data = SimpleNamespace(
@@ -131,6 +115,7 @@ class TestAsyncSetupEntry:
         inverter = MagicMock()
         inverter.decoded_model = {"AdvPwrCtrlEn": 0x0}
         inverter.advanced_power_control = True
+        inverter.apc_may_be_supported = True
         mock_hub.option_site_limit_control = False
         mock_hub.inverters = [inverter]
 
@@ -154,6 +139,7 @@ class TestAsyncSetupEntry:
         """Test setup with no entities to add."""
         inverter = MagicMock()
         inverter.advanced_power_control = False
+        inverter.apc_may_be_supported = False
         mock_hub.option_site_limit_control = False
         mock_hub.option_detect_extras = False
         mock_hub.inverters = [inverter]

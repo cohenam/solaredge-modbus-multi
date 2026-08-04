@@ -14,7 +14,6 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
-from pymodbus.client.mixin import ModbusClientMixin
 
 from custom_components.solaredge_modbus_multi.const import (
     BatteryLimit,
@@ -34,25 +33,6 @@ from custom_components.solaredge_modbus_multi.number import (
     StorageDischargeLimit,
     async_setup_entry,
 )
-
-
-@pytest.fixture
-def mock_coordinator():
-    """Create a mock coordinator."""
-    coordinator = MagicMock()
-    coordinator.async_add_listener = MagicMock()
-    coordinator.async_request_refresh = AsyncMock()
-    coordinator.data = {}
-    return coordinator
-
-
-@pytest.fixture
-def mock_config_entry():
-    """Create a mock config entry."""
-    entry = MagicMock()
-    entry.entry_id = "test_entry_123"
-    entry.data = {"name": "Test SolarEdge"}
-    return entry
 
 
 @pytest.fixture
@@ -262,19 +242,11 @@ class TestStorageACChargeLimit:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(
-            ModbusClientMixin, "convert_to_registers", return_value=[0x4220, 0x0000]
-        ) as mock_convert:
-            await entity.async_set_native_value(40.0)
+        await entity.async_set_native_value(40.0)
 
-            mock_convert.assert_called_once_with(
-                40.0,
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            )
-            mock_inverter_platform.write_registers.assert_called_once_with(
-                address=57350, payload=[0x4220, 0x0000]
-            )
+        mock_inverter_platform.write_registers.assert_called_once_with(
+            address=57350, payload=[0, 16928]
+        )
 
 
 # StorageBackupReserve Tests
@@ -365,19 +337,11 @@ class TestStorageBackupReserve:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(
-            ModbusClientMixin, "convert_to_registers", return_value=[0x4248, 0x0000]
-        ) as mock_convert:
-            await entity.async_set_native_value(50)
+        await entity.async_set_native_value(50)
 
-            mock_convert.assert_called_once_with(
-                50,
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            )
-            mock_inverter_platform.write_registers.assert_called_once_with(
-                address=57352, payload=[0x4248, 0x0000]
-            )
+        mock_inverter_platform.write_registers.assert_called_once_with(
+            address=57352, payload=[0, 16968]
+        )
 
 
 # StorageCommandTimeout Tests
@@ -469,19 +433,11 @@ class TestStorageCommandTimeout:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(
-            ModbusClientMixin, "convert_to_registers", return_value=[0x0E10, 0x0000]
-        ) as mock_convert:
-            await entity.async_set_native_value(3600)
+        await entity.async_set_native_value(3600)
 
-            mock_convert.assert_called_once_with(
-                3600,
-                data_type=ModbusClientMixin.DATATYPE.UINT32,
-                word_order="little",
-            )
-            mock_inverter_platform.write_registers.assert_called_once_with(
-                address=57355, payload=[0x0E10, 0x0000]
-            )
+        mock_inverter_platform.write_registers.assert_called_once_with(
+            address=57355, payload=[3600, 0]
+        )
 
 
 # StorageChargeLimit Tests
@@ -573,19 +529,11 @@ class TestStorageChargeLimit:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(
-            ModbusClientMixin, "convert_to_registers", return_value=[0x459C, 0x4000]
-        ) as mock_convert:
-            await entity.async_set_native_value(5000)
+        await entity.async_set_native_value(5000)
 
-            mock_convert.assert_called_once_with(
-                5000,
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            )
-            mock_inverter_platform.write_registers.assert_called_once_with(
-                address=57358, payload=[0x459C, 0x4000]
-            )
+        mock_inverter_platform.write_registers.assert_called_once_with(
+            address=57358, payload=[16384, 17820]
+        )
 
 
 # StorageDischargeLimit Tests
@@ -677,19 +625,11 @@ class TestStorageDischargeLimit:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(
-            ModbusClientMixin, "convert_to_registers", return_value=[0x457A, 0x0000]
-        ) as mock_convert:
-            await entity.async_set_native_value(4000)
+        await entity.async_set_native_value(4000)
 
-            mock_convert.assert_called_once_with(
-                4000,
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            )
-            mock_inverter_platform.write_registers.assert_called_once_with(
-                address=57360, payload=[0x457A, 0x0000]
-            )
+        mock_inverter_platform.write_registers.assert_called_once_with(
+            address=57360, payload=[0, 17786]
+        )
 
 
 # SolarEdgeSiteLimit Tests
@@ -801,19 +741,11 @@ class TestSolarEdgeSiteLimit:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(
-            ModbusClientMixin, "convert_to_registers", return_value=[0x45FA, 0x0000]
-        ) as mock_convert:
-            await entity.async_set_native_value(8000)
+        await entity.async_set_native_value(8000)
 
-            mock_convert.assert_called_once_with(
-                8000,
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            )
-            mock_inverter_platform.write_registers.assert_called_once_with(
-                address=57346, payload=[0x45FA, 0x0000]
-            )
+        mock_inverter_platform.write_registers.assert_called_once_with(
+            address=57346, payload=[0, 17914]
+        )
 
 
 # SolarEdgeExternalProductionMax Tests
@@ -914,19 +846,11 @@ class TestSolarEdgeExternalProductionMax:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(
-            ModbusClientMixin, "convert_to_registers", return_value=[0x461C, 0x4000]
-        ) as mock_convert:
-            await entity.async_set_native_value(10000)
+        await entity.async_set_native_value(10000)
 
-            mock_convert.assert_called_once_with(
-                10000,
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            )
-            mock_inverter_platform.write_registers.assert_called_once_with(
-                address=57362, payload=[0x461C, 0x4000]
-            )
+        mock_inverter_platform.write_registers.assert_called_once_with(
+            address=57362, payload=[16384, 17948]
+        )
 
 
 # SolarEdgeActivePowerLimitSet Tests
@@ -1029,19 +953,11 @@ class TestSolarEdgeActivePowerLimitSet:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(
-            ModbusClientMixin, "convert_to_registers", return_value=[0x0050]
-        ) as mock_convert:
-            await entity.async_set_native_value(80)
+        await entity.async_set_native_value(80)
 
-            mock_convert.assert_called_once_with(
-                80,
-                data_type=ModbusClientMixin.DATATYPE.UINT16,
-                word_order="little",
-            )
-            mock_inverter_platform.write_registers.assert_called_once_with(
-                address=61441, payload=[0x0050]
-            )
+        mock_inverter_platform.write_registers.assert_called_once_with(
+            address=61441, payload=[80]
+        )
 
 
 # SolarEdgeCosPhiSet Tests
@@ -1141,19 +1057,11 @@ class TestSolarEdgeCosPhiSet:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(
-            ModbusClientMixin, "convert_to_registers", return_value=[0x3F73, 0x3333]
-        ) as mock_convert:
-            await entity.async_set_native_value(0.95)
+        await entity.async_set_native_value(0.95)
 
-            mock_convert.assert_called_once_with(
-                0.95,
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            )
-            mock_inverter_platform.write_registers.assert_called_once_with(
-                address=61442, payload=[0x3F73, 0x3333]
-            )
+        mock_inverter_platform.write_registers.assert_called_once_with(
+            address=61442, payload=[13107, 16243]
+        )
 
 
 # SolarEdgePowerReduce Tests
@@ -1253,19 +1161,11 @@ class TestSolarEdgePowerReduce:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(
-            ModbusClientMixin, "convert_to_registers", return_value=[0x4248, 0x0000]
-        ) as mock_convert:
-            await entity.async_set_native_value(50.0)
+        await entity.async_set_native_value(50.0)
 
-            mock_convert.assert_called_once_with(
-                50.0,
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            )
-            mock_inverter_platform.write_registers.assert_called_once_with(
-                address=61760, payload=[0x4248, 0x0000]
-            )
+        mock_inverter_platform.write_registers.assert_called_once_with(
+            address=61760, payload=[0, 16968]
+        )
 
 
 # SolarEdgeCurrentLimit Tests
@@ -1365,19 +1265,11 @@ class TestSolarEdgeCurrentLimit:
             mock_inverter_platform, mock_config_entry, mock_coordinator
         )
 
-        with patch.object(
-            ModbusClientMixin, "convert_to_registers", return_value=[0x4200, 0x0000]
-        ) as mock_convert:
-            await entity.async_set_native_value(32.0)
+        await entity.async_set_native_value(32.0)
 
-            mock_convert.assert_called_once_with(
-                32.0,
-                data_type=ModbusClientMixin.DATATYPE.FLOAT32,
-                word_order="little",
-            )
-            mock_inverter_platform.write_registers.assert_called_once_with(
-                address=61838, payload=[0x4200, 0x0000]
-            )
+        mock_inverter_platform.write_registers.assert_called_once_with(
+            address=61838, payload=[0, 16896]
+        )
 
 
 # async_setup_entry Tests
@@ -1405,6 +1297,8 @@ class TestAsyncSetupEntry:
         inverter.decoded_storage_control = True
         inverter.has_battery = True
         inverter.advanced_power_control = True
+        inverter.gpc_may_be_supported = True
+        inverter.apc_may_be_supported = True
         hub.inverters = [inverter]
 
         coordinator = MagicMock()
@@ -1437,6 +1331,8 @@ class TestAsyncSetupEntry:
         inverter.decoded_storage_control = False
         inverter.has_battery = False
         inverter.advanced_power_control = False
+        inverter.gpc_may_be_supported = False
+        inverter.apc_may_be_supported = False
         hub.inverters = [inverter]
 
         coordinator = MagicMock()

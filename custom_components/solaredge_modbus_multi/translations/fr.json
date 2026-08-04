@@ -72,6 +72,7 @@
           "detect_meters": "Auto-détecter les capteurs",
           "detect_batteries": "Auto-détecter les batteries",
           "detect_extras": "Détection automatique des entités supplémentaires",
+          "allow_hardware_writes": "Autoriser les écritures matérielles (commandes d'écriture Modbus)",
           "advanced_power_control": "Options de contrôle de l'alimentation",
           "sleep_after_write": "Délai de commande de l'onduleur (en secondes)"
         }
@@ -88,7 +89,7 @@
         "title": "Options de batterie",
         "data": {
           "allow_battery_energy_reset": "Autoriser la réinitialisation de la batterie",
-          "battery_energy_reset_cycles": "Cycles de mise à jour pour réinitialiser l'énergie de la batterie",
+          "battery_energy_reset_cycles": "Relevés de batterie consécutifs inférieurs avant d'accepter une réinitialisation de l'énergie",
           "battery_rating_adjust": "Ajustement de la capacité de la batterie (pourcentage)"
         }
       }

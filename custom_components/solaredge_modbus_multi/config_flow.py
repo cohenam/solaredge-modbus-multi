@@ -484,6 +484,10 @@ class SolaredgeModbusMultiOptionsFlowHandler(OptionsFlowWithReload):
                 ConfName.ADV_PWR_CONTROL: self.config_entry.options.get(
                     ConfName.ADV_PWR_CONTROL, bool(ConfDefaultFlag.ADV_PWR_CONTROL)
                 ),
+                ConfName.ALLOW_HARDWARE_WRITES: self.config_entry.options.get(
+                    ConfName.ALLOW_HARDWARE_WRITES,
+                    bool(ConfDefaultFlag.ALLOW_HARDWARE_WRITES),
+                ),
                 ConfName.SLEEP_AFTER_WRITE: self.config_entry.options.get(
                     ConfName.SLEEP_AFTER_WRITE, ConfDefaultInt.SLEEP_AFTER_WRITE
                 ),
@@ -519,6 +523,10 @@ class SolaredgeModbusMultiOptionsFlowHandler(OptionsFlowWithReload):
                     vol.Optional(
                         f"{ConfName.ADV_PWR_CONTROL}",
                         default=user_input[ConfName.ADV_PWR_CONTROL],
+                    ): cv.boolean,
+                    vol.Optional(
+                        f"{ConfName.ALLOW_HARDWARE_WRITES}",
+                        default=user_input[ConfName.ALLOW_HARDWARE_WRITES],
                     ): cv.boolean,
                     vol.Optional(
                         f"{ConfName.SLEEP_AFTER_WRITE}",

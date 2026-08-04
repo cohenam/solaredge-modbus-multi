@@ -15,7 +15,11 @@ from custom_components.solaredge_modbus_multi.hub import (
     SolarEdgeInverter,
     SolarEdgeModbusMultiHub,
 )
-from tests.conftest import create_exception_response, create_modbus_response
+from tests.conftest import (
+    create_exception_response,
+    create_modbus_response,
+    install_connection_double,
+)
 
 SLOW_ADDRESSES = {61440, 61696, 61782, 57344, 57362, 57348}
 FAST_ADDRESSES = {40044, 40113}
@@ -71,7 +75,7 @@ async def test_slow_blocks_follow_poll_tiers(
     )
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -107,8 +111,7 @@ async def test_slow_poll_cycle_counter(mock_hub) -> None:
     """slow_poll_due follows the multiplier across refresh cycles."""
     mock_hub.initalized = True
     mock_hub._keep_modbus_open = True
-    mock_hub._client = MagicMock()
-    mock_hub._client.connected = True
+    install_connection_double(mock_hub._transport)
 
     due_pattern = []
     for _ in range(7):
@@ -123,8 +126,7 @@ async def test_write_forces_slow_poll(mock_hub) -> None:
     """A write to control registers forces a slow poll on the next cycle."""
     mock_hub.initalized = True
     mock_hub._keep_modbus_open = True
-    mock_hub._client = MagicMock()
-    mock_hub._client.connected = True
+    install_connection_double(mock_hub._transport)
 
     # Cycle 0 is always a slow poll; cycle 1 is not (multiplier 3)
     await mock_hub.async_refresh_modbus_data()
@@ -161,8 +163,7 @@ async def test_multiplier_of_one_polls_everything(
     )
     hub.initalized = True
     hub._keep_modbus_open = True
-    hub._client = MagicMock()
-    hub._client.connected = True
+    install_connection_double(hub._transport)
 
     for _ in range(4):
         await hub.async_refresh_modbus_data()
@@ -181,7 +182,7 @@ async def test_disabled_slow_block_drops_stale_values(
     mock_client.read_holding_registers.side_effect = side_effect
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -226,8 +227,7 @@ async def test_failed_poll_preserves_forced_slow_poll(mock_hub) -> None:
 
     mock_hub.initalized = True
     mock_hub._keep_modbus_open = True
-    mock_hub._client = MagicMock()
-    mock_hub._client.connected = True
+    install_connection_double(mock_hub._transport)
 
     # Two successful cycles (0 and 1); cycle 2 would be off-cycle
     await mock_hub.async_refresh_modbus_data()
@@ -261,7 +261,7 @@ async def test_write_registers_requests_slow_poll(mock_hub, mock_modbus_client) 
     mock_client.write_registers.return_value = create_modbus_response([])
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()
@@ -281,8 +281,7 @@ async def test_write_during_refresh_keeps_slow_poll_request(mock_hub) -> None:
 
     mock_hub.initalized = True
     mock_hub._keep_modbus_open = True
-    mock_hub._client = MagicMock()
-    mock_hub._client.connected = True
+    install_connection_double(mock_hub._transport)
 
     # Cycles 0 and 1: cycle 2 will be an off-cycle (multiplier 3)
     await mock_hub.async_refresh_modbus_data()
@@ -321,7 +320,7 @@ async def test_uncommitted_power_settings_tracking_and_warning(
     mock_client.write_registers.return_value = create_modbus_response([])
 
     with patch(
-        "custom_components.solaredge_modbus_multi.hub.AsyncModbusTcpClient",
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
         mock_modbus_client,
     ):
         await mock_hub.connect()

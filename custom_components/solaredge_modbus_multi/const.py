@@ -117,6 +117,29 @@ class BatteryLimit(IntEnum):
     DischargeMax = 1000000  # watts
 
 
+class PollGroup(StrEnum):
+    """Read-block families that can be polled at independent cadences.
+
+    Modbus reads are block reads, so a group is the finest granularity at
+    which polling can be thinned: entities sharing one read cannot be
+    split apart without adding transactions.
+    """
+
+    CORE = "core"  # inverter model block — the reason the integration exists
+    METER = "meter"
+    BATTERY = "battery"
+    STATUS = "status"  # grid on/off, status vendor 4
+    MMPPT = "mmppt"
+    EVSE = "evse"
+    SETTINGS = "settings"  # power control, site limit, storage
+
+
+CONFIGURABLE_POLL_GROUPS: Final = frozenset(PollGroup) - {PollGroup.CORE}
+
+POLL_MULTIPLIER_MIN: Final = 1
+POLL_MULTIPLIER_MAX: Final = 60
+
+
 class ConfDefaultInt(IntEnum):
     """Defaults for options that are integers."""
 
@@ -140,6 +163,9 @@ class ConfDefaultFlag(IntEnum):
     ADV_STORAGE_CONTROL = 0
     ADV_SITE_LIMIT_CONTROL = 0
     ALLOW_BATTERY_ENERGY_RESET = 0
+    # Hardware writes are opt-in: with this off no write-capable entity is
+    # created and the hub refuses writes outright.
+    ALLOW_HARDWARE_WRITES = 0
 
 
 class ConfDefaultStr(StrEnum):
@@ -158,6 +184,7 @@ class ConfName(StrEnum):
     ADV_STORAGE_CONTROL = "adv_storage_control"
     ADV_SITE_LIMIT_CONTROL = "adv_site_limit_control"
     ALLOW_BATTERY_ENERGY_RESET = "allow_battery_energy_reset"
+    ALLOW_HARDWARE_WRITES = "allow_hardware_writes"
     SLEEP_AFTER_WRITE = "sleep_after_write"
     BATTERY_RATING_ADJUST = "battery_rating_adjust"
     BATTERY_ENERGY_RESET_CYCLES = "battery_energy_reset_cycles"

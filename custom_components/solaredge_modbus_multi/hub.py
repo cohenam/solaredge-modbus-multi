@@ -16,13 +16,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt
-from pymodbus.client import AsyncModbusTcpClient
-from pymodbus.exceptions import ConnectionException, ModbusIOException
-
-try:  # pymodbus 3.11.1+
-    from pymodbus.pdu.pdu import ExceptionResponse
-except ImportError:  # older pymodbus
-    from pymodbus.pdu import ExceptionResponse
 
 from .const import (
     BATTERY_REG_BASE,
@@ -35,7 +28,7 @@ from .const import (
     ConfDefaultStr,
     ConfName,
     ModbusDefaults,
-    ModbusExceptions,
+    PollGroup,
     RetrySettings,
     SolarEdgeTimeouts,
     check_config_issue_id,
@@ -56,7 +49,6 @@ from .devices import (
     SolarEdgeMeter,
     SolarEdgeMMPPTUnit,
     decode_sunspec_common_block,
-    decode_sunspec_string,
     drop_decoded,
     log_decoded,
 )
@@ -109,7 +101,6 @@ __all__ = [
     "async_delete_entry_issues",
     "check_config_issue_id",
     "decode_sunspec_common_block",
-    "decode_sunspec_string",
     "detect_timeout_issue_id",
     "drop_decoded",
     "log_decoded",
@@ -181,6 +172,10 @@ class SolarEdgeModbusMultiHub:
             ConfName.ALLOW_BATTERY_ENERGY_RESET,
             bool(ConfDefaultFlag.ALLOW_BATTERY_ENERGY_RESET),
         )
+        self._allow_hardware_writes = entry_options.get(
+            ConfName.ALLOW_HARDWARE_WRITES,
+            bool(ConfDefaultFlag.ALLOW_HARDWARE_WRITES),
+        )
         self._sleep_after_write = entry_options.get(
             ConfName.SLEEP_AFTER_WRITE, ConfDefaultInt.SLEEP_AFTER_WRITE
         )
@@ -191,32 +186,24 @@ class SolarEdgeModbusMultiHub:
             ConfName.BATTERY_ENERGY_RESET_CYCLES,
             ConfDefaultInt.BATTERY_ENERGY_RESET_CYCLES,
         )
-        self._slow_poll_multiplier = max(
-            1,
-            int(
-                entry_options.get(
-                    ConfName.SLOW_POLL_MULTIPLIER,
-                    ConfDefaultInt.SLOW_POLL_MULTIPLIER,
-                )
-            ),
-        )
+        self._poll_multipliers = self._build_poll_multipliers(entry_options)
         self._poll_cycle = -1
         self._slow_poll_requests = 0
-        self.slow_poll_due = True
+        # Everything is due until the first refresh decides otherwise, so
+        # discovery and cycle 0 always see a complete picture.
+        self._due_groups: set[PollGroup] = set(PollGroup)
+        self._group_last_cycle: dict[PollGroup, int | None] = dict.fromkeys(PollGroup)
+        self._groups_read: set[PollGroup] = set()
+        self._settings_read_incomplete = False
         self._retry_limit = self._yaml_config.get("retry", {}).get(
             "limit", RetrySettings.Limit
         )
-        self._mb_reconnect_delay = self._yaml_config.get("modbus", {}).get(
-            "reconnect_delay", ModbusDefaults.ReconnectDelay
-        )
-        self._mb_reconnect_delay_max = self._yaml_config.get("modbus", {}).get(
-            "reconnect_delay_max", ModbusDefaults.ReconnectDelayMax
-        )
+        # Of the YAML `modbus:` options only `timeout` still reaches the
+        # transport: modbus-connection issues each request once and reconnects
+        # on demand, so retries and reconnect delays are no longer ours to
+        # set. The keys stay accepted for configuration compatibility.
         self._mb_timeout = self._yaml_config.get("modbus", {}).get(
             "timeout", ModbusDefaults.Timeout
-        )
-        self._mb_retries = self._yaml_config.get("modbus", {}).get(
-            "retries", ModbusDefaults.Retries
         )
         self._id = entry_data[CONF_NAME].lower()
         self.inverters = []
@@ -233,16 +220,10 @@ class SolarEdgeModbusMultiHub:
         self._uncommitted_power_settings: set[int] = set()
         self._uncommitted_warned = False
 
-        # The factory resolves this module's AsyncModbusTcpClient at call
-        # time, so tests patching hub.AsyncModbusTcpClient keep working.
         self._transport = ModbusTransport(
             host=self._host,
             port=self._port,
             timeout=self._mb_timeout,
-            retries=self._mb_retries,
-            reconnect_delay=self._mb_reconnect_delay,
-            reconnect_delay_max=self._mb_reconnect_delay_max,
-            client_factory=lambda **kwargs: AsyncModbusTcpClient(**kwargs),
         )
 
         self._pymodbus_version = pymodbus_version
@@ -258,12 +239,62 @@ class SolarEdgeModbusMultiHub:
                 f"adv_storage_control={self._adv_storage_control}, "
                 f"adv_site_limit_control={self._adv_site_limit_control}, "
                 f"allow_battery_energy_reset={self._allow_battery_energy_reset}, "
+                f"allow_hardware_writes={self._allow_hardware_writes}, "
                 f"sleep_after_write={self._sleep_after_write}, "
                 f"battery_rating_adjust={self._battery_rating_adjust}, "
             ),
         )
 
         _LOGGER.debug(f"pymodbus version {self.pymodbus_version}")
+        _LOGGER.debug(f"poll multipliers: {dict(self._poll_multipliers)}")
+
+    def _build_poll_multipliers(self, entry_options) -> dict[PollGroup, int]:
+        """Resolve each group's cadence from options then advanced YAML.
+
+        Defaults reproduce the pre-poll-group behaviour exactly: everything
+        every cycle except the settings blocks, which keep the existing
+        slow_poll_multiplier option. A YAML `poll:` entry overrides it.
+        """
+        multipliers = dict.fromkeys(PollGroup, 1)
+        multipliers[PollGroup.SETTINGS] = max(
+            1,
+            int(
+                entry_options.get(
+                    ConfName.SLOW_POLL_MULTIPLIER,
+                    ConfDefaultInt.SLOW_POLL_MULTIPLIER,
+                )
+            ),
+        )
+
+        for name, multiplier in self._yaml_config.get("poll", {}).items():
+            group = PollGroup(name)
+            if group is PollGroup.CORE:
+                continue
+            multipliers[group] = max(1, int(multiplier))
+
+        return multipliers
+
+    def poll_due(self, group: PollGroup) -> bool:
+        """Whether this refresh reads the blocks belonging to `group`."""
+        return group in self._due_groups
+
+    def note_group_read(self, group: PollGroup) -> None:
+        """Record that a block belonging to `group` was actually read.
+
+        Being due is not evidence of anything: a group whose blocks are
+        disabled by options, or whose device list is empty, would otherwise
+        report a cadence it never performed.
+        """
+        self._groups_read.add(group)
+
+    def note_settings_read_incomplete(self) -> None:
+        """Record that a settings block did not answer this refresh.
+
+        Detect-probe timeouts are handled inside the device read, so the
+        refresh still completes. The settings data is stale, though, so this
+        poll must not count as having served a write-forced re-read.
+        """
+        self._settings_read_incomplete = True
 
     async def _async_init_solaredge(self) -> None:
         """Detect devices and load initial modbus data from inverters."""
@@ -443,8 +474,7 @@ class SolarEdgeModbusMultiHub:
             ModbusIllegalFunction,
             ModbusIllegalValue,
             DeviceInvalid,
-            ConnectionException,
-            ModbusIOException,
+            ModbusIOError,
             TimeoutError,
         ) as e:
             await self.disconnect()
@@ -454,10 +484,8 @@ class SolarEdgeModbusMultiHub:
                 raise HubInitFailed(f"Read error: {e}")
             if isinstance(e, DeviceInvalid):
                 raise HubInitFailed(f"Invalid device: {e}")
-            if isinstance(e, ConnectionException):
+            if isinstance(e, ModbusIOError):
                 raise HubInitFailed(f"Connection failed: {e}")
-            if isinstance(e, ModbusIOException):
-                raise HubInitFailed(f"Modbus error: {e}")
             raise HubInitFailed(f"Timeout error: {e}")
 
         self.initalized = True
@@ -465,14 +493,32 @@ class SolarEdgeModbusMultiHub:
     async def async_refresh_modbus_data(self) -> bool:
         """Refresh modbus data from inverters."""
 
-        await self.connect()
+        try:
+            await self.connect()
+        except ModbusIOError as e:
+            # A refused connection must reach the coordinator as one of our
+            # failure types with its repair issue raised, not as a bare
+            # transport error that bypasses both.
+            self.online = False
+            ir.async_create_issue(
+                self._hass,
+                DOMAIN,
+                check_config_issue_id(self._entry_id),
+                is_fixable=True,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="check_configuration",
+                data={"entry_id": self._entry_id},
+            )
+            if not self.initalized:
+                raise HubInitFailed(f"Setup failed: {e}")
+            raise DataUpdateFailed(f"Connection failed: {e}")
 
         if not self.initalized:
             try:
                 async with asyncio.timeout(self.coordinator_timeout):
                     await self._async_init_solaredge()
 
-            except (ConnectionException, ModbusIOException, TimeoutError) as e:
+            except (ModbusIOError, TimeoutError) as e:
                 await self.disconnect()
                 ir.async_create_issue(
                     self._hass,
@@ -523,30 +569,41 @@ class SolarEdgeModbusMultiHub:
         # instead of being cleared by this refresh's completion.
         next_cycle = self._poll_cycle + 1
         served_slow_poll_requests = self._slow_poll_requests
-        self.slow_poll_due = (
-            served_slow_poll_requests > 0
-            or next_cycle % self._slow_poll_multiplier == 0
+        self._due_groups = {
+            group
+            for group, multiplier in self._poll_multipliers.items()
+            if next_cycle % multiplier == 0
+        }
+        if served_slow_poll_requests > 0:
+            self._due_groups.add(PollGroup.SETTINGS)
+        self._settings_read_incomplete = False
+        self._groups_read = set()
+
+        # CORE's multiplier is pinned to 1, so its poll_due is always true.
+        device_groups = (
+            (PollGroup.CORE, self.inverters),
+            (PollGroup.METER, self.meters),
+            (PollGroup.BATTERY, self.batteries),
+            (PollGroup.EVSE, self.evses),
         )
 
         try:
             async with asyncio.timeout(self.coordinator_timeout):
                 # Read all devices sequentially with batch lock per device
-                for inv in self.inverters:
-                    await self._poll_device_with_lock(inv)
-                for meter in self.meters:
-                    await self._poll_device_with_lock(meter)
-                for bat in self.batteries:
-                    await self._poll_device_with_lock(bat)
-                for evse in self.evses:
-                    await self._poll_device_with_lock(evse)
+                for group, devices in device_groups:
+                    if not self.poll_due(group):
+                        continue
+                    for device in devices:
+                        await self._poll_device_with_lock(device)
+                    if devices:
+                        self.note_group_read(group)
 
         except (
             ModbusReadError,
             ModbusIllegalFunction,
             ModbusIllegalValue,
             DeviceInvalid,
-            ConnectionException,
-            ModbusIOException,
+            ModbusIOError,
         ) as e:
             await self.disconnect()
             if isinstance(
@@ -555,12 +612,10 @@ class SolarEdgeModbusMultiHub:
                 raise DataUpdateFailed(f"Update failed: {e}")
             if isinstance(e, DeviceInvalid):
                 raise DataUpdateFailed(f"Invalid device: {e}")
-            if isinstance(e, ConnectionException):
-                raise DataUpdateFailed(f"Connection failed: {e}")
-            raise DataUpdateFailed(f"Modbus error: {e}")
+            raise DataUpdateFailed(f"Connection failed: {e}")
 
         except TimeoutError as e:
-            await self.disconnect(clear_client=True)
+            await self.disconnect()
             self._timeout_counter += 1
 
             _LOGGER.debug(
@@ -574,15 +629,33 @@ class SolarEdgeModbusMultiHub:
             raise DataUpdateFailed(f"Timeout error: {e}")
 
         self._poll_cycle = next_cycle
+
+        # The forced-request accounting asks "did the settings poll run to
+        # completion" — which is true even where no settings block exists,
+        # otherwise a write on such a hub would leave the request pending
+        # forever. `last_served_cycle` asks the stricter question of whether
+        # anything was physically read, so it keys off _groups_read instead.
+        settings_complete = (
+            self.poll_due(PollGroup.SETTINGS) and not self._settings_read_incomplete
+        )
+        for group in self._groups_read:
+            if group is PollGroup.SETTINGS and self._settings_read_incomplete:
+                continue
+            self._group_last_cycle[group] = next_cycle
+
         # Consume only the requests this poll actually served; requests from
         # writes that landed during the refresh stay pending for the next one.
-        self._slow_poll_requests -= served_slow_poll_requests
+        # A settings block whose detect probe timed out is handled inside the
+        # device read, so the refresh still "succeeds" — but it did not verify
+        # the write, so the forced request must survive to the next cycle.
+        if settings_complete:
+            self._slow_poll_requests -= served_slow_poll_requests
 
         # SolarEdge requires an explicit commit for static power-control
         # settings to survive an inverter restart. Warn once per batch,
         # after a slow poll has re-read the control blocks post-write.
         if (
-            self.slow_poll_due
+            settings_complete
             and self._uncommitted_power_settings
             and not self._uncommitted_warned
         ):
@@ -603,13 +676,15 @@ class SolarEdgeModbusMultiHub:
         if not self.keep_modbus_open:
             await self.disconnect()
 
+        # Timestamps follow physical reads: a device whose group was skipped
+        # must not claim a refresh it never got. EVSE devices do not track a
+        # last-update timestamp.
         timestamp = dt.now()
-        for inverter in self.inverters:
-            inverter.set_last_update(timestamp)
-        for meter in self.meters:
-            meter.set_last_update(timestamp)
-        for battery in self.batteries:
-            battery.set_last_update(timestamp)
+        for group, devices in device_groups:
+            if group is PollGroup.EVSE or not self.poll_due(group):
+                continue
+            for device in devices:
+                device.set_last_update(timestamp)
 
         return True
 
@@ -617,53 +692,34 @@ class SolarEdgeModbusMultiHub:
         """Connect to inverter."""
         await self._transport.connect()
 
-    async def disconnect(self, clear_client: bool = False) -> None:
-        """Disconnect from inverter."""
-        await self._transport.disconnect(clear_client)
+    async def disconnect(self) -> None:
+        """Disconnect from inverter, retiring the connection generation."""
+        await self._transport.recycle()
 
     async def shutdown(self) -> None:
         """Shut down the hub and disconnect."""
 
         self.online = False
-        await self.disconnect(clear_client=True)
+        await self.disconnect()
 
-    def _validate_read_result(self, unit, address, rcount, result):
-        """Map error responses to exceptions and enforce the register count."""
+    async def modbus_read_holding_registers(
+        self, unit, address, rcount, group: PollGroup | None = None
+    ):
+        """Read modbus registers from inverter.
+
+        Error responses are already mapped to our exception hierarchy by the
+        transport, which is where the library's types stop. When `group` is
+        given, a validated response records a served read for that poll
+        group, so cadence evidence stays keyed to physical reads.
+        """
 
         if _LOGGER.isEnabledFor(logging.DEBUG):
-            _LOGGER.debug(f"I{unit}: result is error: {result.isError()} ")
+            _LOGGER.debug(
+                f"I{unit}: modbus_read_holding_registers "
+                f"address={address} count={rcount}"
+            )
 
-        if result.isError():
-            _LOGGER.debug(f"I{unit}: error result: {type(result)} ")
-
-            # Sanitized: type/code only, never payload or host details.
-            if type(result) is ExceptionResponse:
-                self._transport.stats.last_error = (
-                    f"read unit {unit}: ExceptionResponse"
-                    f"(code={result.exception_code})"
-                )
-            else:
-                self._transport.stats.last_error = (
-                    f"read unit {unit}: {type(result).__name__}"
-                )
-
-            if type(result) is ModbusIOException:
-                raise ModbusIOError(result)
-
-            if type(result) is ExceptionResponse:
-                if result.exception_code == ModbusExceptions.IllegalAddress:
-                    _LOGGER.debug(f"I{unit} Read IllegalAddress: {result}")
-                    raise ModbusIllegalAddress(result)
-
-                if result.exception_code == ModbusExceptions.IllegalFunction:
-                    _LOGGER.debug(f"I{unit} Read IllegalFunction: {result}")
-                    raise ModbusIllegalFunction(result)
-
-                if result.exception_code == ModbusExceptions.IllegalValue:
-                    _LOGGER.debug(f"I{unit} Read IllegalValue: {result}")
-                    raise ModbusIllegalValue(result)
-
-            raise ModbusReadError(result)
+        result = await self._transport.read_holding_registers_raw(unit, address, rcount)
 
         if _LOGGER.isEnabledFor(logging.DEBUG):
             _LOGGER.debug(
@@ -678,19 +734,10 @@ class SolarEdgeModbusMultiHub:
                 f"{len(result.registers)} != {rcount} at {address}"
             )
 
+        if group is not None:
+            self.note_group_read(group)
+
         return result
-
-    async def modbus_read_holding_registers(self, unit, address, rcount):
-        """Read modbus registers from inverter."""
-
-        if _LOGGER.isEnabledFor(logging.DEBUG):
-            _LOGGER.debug(
-                f"I{unit}: modbus_read_holding_registers "
-                f"address={address} count={rcount}"
-            )
-
-        result = await self._transport.read_holding_registers_raw(unit, address, rcount)
-        return self._validate_read_result(unit, address, rcount, result)
 
     async def _poll_device_with_lock(self, device) -> None:
         """Poll a single device while holding the modbus session.
@@ -706,66 +753,56 @@ class SolarEdgeModbusMultiHub:
     async def write_registers(self, unit: int, address: int, payload) -> None:
         """Write modbus registers to inverter."""
 
+        # Central refusal, not just entity suppression: a stale entity, a
+        # restored service call or a future caller must not reach the
+        # transport while hardware writes are disabled.
+        if not self._allow_hardware_writes:
+            raise HomeAssistantError(
+                "Hardware writes are disabled for this SolarEdge hub. Enable "
+                '"Allow Hardware Writes" in the integration options to permit '
+                f"writing to device ID {unit}."
+            )
+
         try:
-            result = await self._transport.write_registers_raw(unit, address, payload)
+            await self._transport.write_registers_raw(unit, address, payload)
 
-        except ModbusIOException as e:
-            await self.disconnect()
+        except ModbusIllegalAddress:
+            raise HomeAssistantError(f"Address not supported at device at ID {unit}.")
 
+        except ModbusIllegalFunction:
+            raise HomeAssistantError(f"Function not supported by device at ID {unit}.")
+
+        except ModbusIllegalValue:
+            raise HomeAssistantError(f"Value invalid for device at ID {unit}.")
+
+        except ModbusIOError as e:
+            # Outcome unknown: the frame may have been applied before the
+            # response was lost. The transport has already retired the
+            # connection; never re-send a power-control write on its own.
+            # Do request the re-read though — it is what turns "may or may
+            # not have been applied" into an answer one poll later, instead
+            # of leaving stale entity state until the settings cadence comes
+            # round, which can be minutes.
+            self._note_write_pending_verification(address, confirmed=False)
+            _LOGGER.error(f"Write to inverter ID {unit} had no response: {e}")
+            raise HomeAssistantError(
+                f"No response from inverter ID {unit}; the write at address "
+                f"{address} may or may not have been applied."
+            )
+
+        except ModbusWriteError as e:
             raise HomeAssistantError(
                 f"Error sending command to inverter ID {unit}: {e}."
             )
 
-        except ConnectionException as e:
-            await self.disconnect()
-
-            _LOGGER.error(f"Connection failed: {e}")
-            raise HomeAssistantError(f"Connection to inverter ID {unit} failed.")
-
-        if result.isError():
-            if type(result) is ModbusIOException:
-                await self.disconnect()
-                _LOGGER.error(f"Write failed: No response from inverter ID {unit}.")
-                raise HomeAssistantError(f"No response from inverter ID {unit}.")
-
-            if type(result) is ExceptionResponse:
-                if result.exception_code == ModbusExceptions.IllegalAddress:
-                    _LOGGER.debug(f"Unit {unit} Write IllegalAddress: {result}")
-                    raise HomeAssistantError(
-                        f"Address not supported at device at ID {unit}."
-                    )
-
-                if result.exception_code == ModbusExceptions.IllegalFunction:
-                    _LOGGER.debug(f"Unit {unit} Write IllegalFunction: {result}")
-                    raise HomeAssistantError(
-                        f"Function not supported by device at ID {unit}."
-                    )
-
-                if result.exception_code == ModbusExceptions.IllegalValue:
-                    _LOGGER.debug(f"Unit {unit} Write IllegalValue: {result}")
-                    raise HomeAssistantError(f"Value invalid for device at ID {unit}.")
-
-            await self.disconnect()
-            raise ModbusWriteError(result)
+        except asyncio.CancelledError:
+            # The frame may have reached the inverter before the cancellation
+            # landed, so the outcome is as uncertain as a lost response.
+            self._note_write_pending_verification(address, confirmed=False)
+            raise
 
         self.has_write = address
-        # Control registers changed: request a slow-block re-read. A counter
-        # (not a flag) so an in-flight refresh can't consume this request.
-        # Kept outside the try: it must run exactly once per write.
-        self._slow_poll_requests += 1
-
-        # Track APC static settings pending an explicit commit (61696) or
-        # restore-defaults (61697); blocks span 61696-61781 and 61782-61865.
-        if address in (61696, 61697):
-            if self._uncommitted_power_settings:
-                _LOGGER.debug(
-                    "Power control settings %s committed/restored.",
-                    sorted(self._uncommitted_power_settings),
-                )
-            self._uncommitted_power_settings.clear()
-            self._uncommitted_warned = False
-        elif 61698 <= address <= 61865:
-            self._uncommitted_power_settings.add(address)
+        self._note_write_pending_verification(address, confirmed=True)
 
         try:
             if self.sleep_after_write > 0:
@@ -779,6 +816,47 @@ class SolarEdgeModbusMultiHub:
             self.has_write = None
 
         _LOGGER.debug(f"Finished with write {address}.")
+
+    def _note_write_pending_verification(
+        self, address: int, *, confirmed: bool
+    ) -> None:
+        """Book a write for re-reading, whether or not it was confirmed.
+
+        A confirmed write, one whose response was lost, and one cancelled
+        mid-flight all leave the settings blocks possibly changed and the
+        entities possibly stale, so all three force the re-read.
+
+        `confirmed` decides only what may be *forgotten*. Both directions err
+        the same way — toward warning rather than silence: an unconfirmed
+        setting is still tracked, because prompting a harmless commit beats
+        losing it at the next inverter restart; and an unconfirmed commit does
+        not clear that tracking, because a commit that never landed would
+        otherwise take the warning away with it.
+        """
+        # A counter, not a flag, so an in-flight refresh cannot consume this
+        # request; it must be recorded exactly once per write.
+        self._slow_poll_requests += 1
+
+        # Track APC static settings pending an explicit commit (61696) or
+        # restore-defaults (61697); blocks span 61696-61781 and 61782-61865.
+        if address in (61696, 61697):
+            if not confirmed:
+                _LOGGER.debug(
+                    "Commit/restore at %s was not confirmed; keeping %s pending.",
+                    address,
+                    sorted(self._uncommitted_power_settings),
+                )
+                return
+
+            if self._uncommitted_power_settings:
+                _LOGGER.debug(
+                    "Power control settings %s committed/restored.",
+                    sorted(self._uncommitted_power_settings),
+                )
+            self._uncommitted_power_settings.clear()
+            self._uncommitted_warned = False
+        elif 61698 <= address <= 61865:
+            self._uncommitted_power_settings.add(address)
 
     @staticmethod
     def _safe_version_tuple(version_str: str) -> tuple[int, ...]:
@@ -838,6 +916,35 @@ class SolarEdgeModbusMultiHub:
         return self._detect_extras
 
     @property
+    def poll_groups(self) -> dict[str, dict[str, int | bool | None]]:
+        """Per-group cadence, current due state, and last cycle actually served.
+
+        `last_served_cycle` is what proves the configured cadence is really
+        happening — `multiplier` and `due` only describe intent. A settings
+        poll whose detect probe timed out does not advance it.
+        """
+        return {
+            f"{group}": {
+                "multiplier": self._poll_multipliers[group],
+                "due": group in self._due_groups,
+                "last_served_cycle": self._group_last_cycle[group],
+            }
+            for group in PollGroup
+        }
+
+    @property
+    def slow_poll_due(self) -> bool:
+        """Alias kept so the settings-tier guards read unchanged."""
+        return PollGroup.SETTINGS in self._due_groups
+
+    @slow_poll_due.setter
+    def slow_poll_due(self, value: bool) -> None:
+        if value:
+            self._due_groups.add(PollGroup.SETTINGS)
+        else:
+            self._due_groups.discard(PollGroup.SETTINGS)
+
+    @property
     def keep_modbus_open(self) -> bool:
         return self._keep_modbus_open
 
@@ -850,6 +957,10 @@ class SolarEdgeModbusMultiHub:
     @property
     def allow_battery_energy_reset(self) -> bool:
         return self._allow_battery_energy_reset
+
+    @property
+    def option_allow_hardware_writes(self) -> bool:
+        return self._allow_hardware_writes
 
     @property
     def battery_rating_adjust(self) -> int:
@@ -940,11 +1051,11 @@ class SolarEdgeModbusMultiHub:
     # through the hub.
     @property
     def _client(self):
-        return self._transport._client
+        return self._transport._connection
 
     @_client.setter
     def _client(self, value) -> None:
-        self._transport._client = value
+        self._transport._connection = value
 
     @property
     def _modbus_lock(self) -> asyncio.Lock:
