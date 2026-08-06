@@ -404,6 +404,34 @@ async def test_refresh_modbus_data_timeout_with_retries(
         assert mock_hub._timeout_counter == 0
 
 
+async def test_refresh_timeout_message_has_no_dangling_colon(
+    mock_hub, mock_modbus_client
+) -> None:
+    """A bare TimeoutError must not render as 'Timeout error: ' with nothing after.
+
+    The real source is `asyncio.timeout(coordinator_timeout)` expiring, which
+    raises TimeoutError with an empty str() — unlike the explicitly-messaged
+    one the retry test uses, so that test never covered this.
+    """
+    mock_hub._initalized = True
+    mock_hub._retry_limit = 3
+
+    inverter = MagicMock()
+    inverter.read_modbus_data = AsyncMock(side_effect=TimeoutError())
+    mock_hub.inverters = [inverter]
+
+    with patch(
+        "custom_components.solaredge_modbus_multi.modbus_transport.ModbusConnection",
+        mock_modbus_client,
+    ):
+        await mock_hub.connect()
+
+        with pytest.raises(DataUpdateFailed) as excinfo:
+            await mock_hub.async_refresh_modbus_data()
+
+    assert str(excinfo.value) == "Timeout error"
+
+
 async def test_refresh_modbus_data_modbus_read_error(
     mock_hub, mock_modbus_client
 ) -> None:

@@ -626,7 +626,9 @@ class SolarEdgeModbusMultiHub:
                 self._timeout_counter = 0
                 raise TimeoutError
 
-            raise DataUpdateFailed(f"Timeout error: {e}")
+            # asyncio.timeout() raises a bare TimeoutError whose str() is empty,
+            # which rendered as "Timeout error: " with nothing after the colon.
+            raise DataUpdateFailed(f"Timeout error: {e}" if str(e) else "Timeout error")
 
         self._poll_cycle = next_cycle
 
