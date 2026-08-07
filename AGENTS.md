@@ -65,3 +65,51 @@ Never commit Home Assistant secrets, inverter addresses or serials, diagnostic
 exports, or ignored `.claude/` and `DEPLOY_STATUS.md` notes. Keep automated tests
 on mocks or the fake server. Treat Modbus writes and advanced power/storage
 controls as hardware-affecting, and document safety assumptions.
+
+### Hardware writes are gated, and the deployed policy is "off"
+
+`hub.write_registers()` (Modbus FC16) refuses centrally unless
+`ConfName.ALLOW_HARDWARE_WRITES` is set, and the `number` / `select` / `switch` /
+`button` platforms create no write-capable entity while it is off. It defaults
+off, and **both production instances are deliberately left that way** — the
+parents inverter is never to be written to (decided 2026-08-06), and the owner
+creates no write-capable entities anyway (`detect_extras: false`, both
+advanced-control options off).
+
+The option is still exposed in the options flow **on purpose**. It is per config
+entry, so removing the toggle would also remove the capability from the owner,
+which was never part of that decision. If writes are ever wanted, enabling them
+is a deliberate act, and the central refusal in `hub.write_registers()` remains
+the actual guard regardless.
+
+## Decisions that look like unfinished work
+
+### `close()` is permanent — connection generations are not a workaround
+
+`modbus_connection`'s `close()` sets `_closed` for good; a later `connect()`
+raises `ClientClosedError`. modbus-connection 4.0.0's release notes state this as
+deliberate design, not an alpha rough edge. A wedged socket can therefore only be
+*replaced*, never reopened, which is why `ModbusTransport` carries connection
+generations, `_shielded_recycle`, and a generation-bound `on_connection_lost`.
+**This is permanent architecture. Do not "simplify" it away.**
+
+### Stage D is closed — not deferred
+
+The v4 migration deliberately kept `keep_modbus_open`, the `modbus:` YAML block,
+config-entry schema 2.1, and our own write pacing, pending the library leaving
+alpha. modbus-connection 4.0.0 shipped 2026-08-07, so that gate has passed — and
+the work is **not** being done.
+
+Its purpose was converging with upstream once it was safe. The fork no longer
+tracks upstream, so that purpose is gone. What remains would be removing working
+functionality behind a one-way 2.1 → 2.2 config-entry migration on two live
+instances, for no user-visible gain. Note these are *unused*, not *inert*:
+`keep_modbus_open` drives real branches (`hub.py:538,678`) and `modbus.timeout`
+feeds `_mb_timeout` (`hub.py:205`); they simply never fire under the deployed
+options. Reopen only if a concrete need appears.
+
+### `awesomeversion` is required
+
+It is not a pymodbus version guard and cannot be dropped. It gates
+`use_status_vendor4` on the inverter's `C_Version` (`devices.py:386`) and the
+inverted-power sensors on `HA_VERSION` (`sensor.py:623,1760`).
