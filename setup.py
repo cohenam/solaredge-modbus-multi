@@ -5,7 +5,7 @@ setup(
     version="3.3.0",
     packages=find_packages(include=["custom_components*"]),
     install_requires=[
-        "modbus-connection[pymodbus]==4.0.0a1",
+        "modbus-connection[pymodbus]==4.0.0",
         "pymodbus==3.13.1",
         "awesomeversion>=25.5.0",
     ],
