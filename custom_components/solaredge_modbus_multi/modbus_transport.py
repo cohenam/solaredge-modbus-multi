@@ -11,10 +11,9 @@ everything that library has no equivalent for:
 * the session lock with task reentrancy, so one device's whole read cycle
   is uninterrupted — SolarEdge firmware answers with the wrong unit id
   when requests interleave;
-* connection *generations*: the library's close() is permanent, so
-  recovering from a wedged socket means building a new connection rather
-  than reopening one, and a dead generation's callbacks must not touch
-  live state;
+* connection *generations*: the library's close() is permanent. Although
+  4.2 added a reusable disconnect(), this transport deliberately retires a
+  failed or cancelled generation so late callbacks cannot touch live state;
 * PollStats counters for diagnostics.
 
 Error policy: a per-request timeout is mapped to ModbusIOError, NOT left
@@ -190,8 +189,9 @@ class ModbusTransport:
     async def _recycle_unlocked(self) -> None:
         """Retire this connection generation and build a fresh one on next use.
 
-        The library's close() is permanent (it marks the connection closed
-        for good), so a wedged socket cannot be reopened — only replaced.
+        The library can disconnect a reusable link, but this transport closes
+        and replaces its small connection object so cancellation cleanup and
+        callbacks stay isolated by generation.
         """
         connection, self._connection = self._connection, None
         self._generation += 1
@@ -267,13 +267,10 @@ class ModbusTransport:
 
         Sanitized: type and code only, never payload or host.
         """
-        self.stats.last_error = (
-            f"{op} unit {unit}: ExceptionResponse(code={e.exception_code})"
-        )
-        illegal = _illegal_for(e.exception_code)
-        if illegal is not None:
-            raise illegal(e)
-        raise default(e)
+        code = int(e.exception_code) if e.exception_code is not None else None
+        self.stats.last_error = f"{op} unit {unit}: ExceptionResponse(code={code})"
+        error_type = _illegal_for(code) or default
+        raise error_type(f"Device returned Modbus exception code {code}") from None
 
     async def read_holding_registers_raw(
         self, unit: int, address: int, count: int
@@ -317,12 +314,13 @@ class ModbusTransport:
             # may be half-open or desynchronised either way, so the generation
             # is retired rather than reused. Note only a real exception PDU is
             # evidence a device is answering — the ID scanner keys on that.
-            self.stats.last_error = f"read unit {unit}: {type(e).__name__}"
+            safe_error = f"read unit {unit}: {type(e).__name__}"
+            self.stats.last_error = safe_error
             await self._recycle_unlocked()
             if _is_cancellation(e):
-                raise asyncio.CancelledError from e
+                raise asyncio.CancelledError from None
             # Deliberately ModbusIOError, never TimeoutError — see the helper.
-            raise ModbusIOError(e)
+            raise ModbusIOError(safe_error) from None
 
         return ModbusReadResult(registers)
 
@@ -355,14 +353,16 @@ class ModbusTransport:
                 # frame, swallowed cancellation — can happen after function 16
                 # went out, so the outcome is unknown and the caller must never
                 # re-send on its own.
-                self.stats.last_error = f"write unit {unit}: {type(e).__name__}"
+                error_name = type(e).__name__
+                self.stats.last_error = f"write unit {unit}: {error_name}"
                 await self._recycle_unlocked()
                 if _is_cancellation(e):
-                    raise asyncio.CancelledError from e
+                    raise asyncio.CancelledError from None
                 raise ModbusIOError(
                     f"No confirmed response to write at {address} on unit "
-                    f"{unit}; the write may or may not have been applied: {e}"
-                )
+                    f"{unit}; the write may or may not have been applied "
+                    f"({error_name})"
+                ) from None
 
     def hold_session(self) -> _SessionHold:
         """Reserve the session for a batch of calls by the current task.

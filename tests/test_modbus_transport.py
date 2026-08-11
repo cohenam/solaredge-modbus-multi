@@ -9,6 +9,7 @@ replaced pymodbus's reopenable client.
 from __future__ import annotations
 
 import asyncio
+import traceback
 
 import pytest
 from modbus_connection.exceptions import (
@@ -28,6 +29,7 @@ from custom_components.solaredge_modbus_multi.exceptions import (
     ModbusIllegalValue,
     ModbusIOError,
     ModbusReadError,
+    ModbusWriteError,
 )
 from custom_components.solaredge_modbus_multi.modbus_transport import ModbusTransport
 from tests.conftest import connection_double
@@ -129,7 +131,7 @@ async def test_exception_pdu_keeps_the_connection(transport) -> None:
 
 
 async def test_failed_read_retires_the_generation(transport) -> None:
-    """A wedged socket cannot be reopened, only replaced."""
+    """A failed session is retired instead of reused."""
     await transport.connect()
     first = transport.built[-1]
     first.read_holding_registers.side_effect = ModbusProtocolError("desync")
@@ -246,6 +248,32 @@ def _real_transport(port: int, *, timeout: float) -> ModbusTransport:
     return ModbusTransport(host="127.0.0.1", port=port, timeout=timeout)
 
 
+async def test_exception_pdu_details_stop_at_transport_boundary(
+    _allow_sockets, make_server
+) -> None:
+    """A refused write exposes only the code, never its request payload."""
+    server = await make_server(spaces={1: {}}, exception_units={1: 0x06})
+    transport = _real_transport(server.port, timeout=1)
+    payload = [54321, 54322, 54323, 54324, 54325]
+
+    try:
+        with pytest.raises(ModbusWriteError) as caught:
+            await transport.write_registers_raw(1, 61441, payload)
+    finally:
+        await transport.recycle()
+
+    assert str(caught.value) == "Device returned Modbus exception code 6"
+    assert caught.value.__cause__ is None
+    assert caught.value.__suppress_context__ is True
+    assert transport.stats.last_error == "write unit 1: ExceptionResponse(code=6)"
+    assert server.writes == []
+
+    rendered = "".join(traceback.format_exception(caught.value))
+    assert "54321" not in rendered
+    assert "write_registers(" not in rendered
+    assert "ServerDeviceBusyError" not in rendered
+
+
 async def test_outer_deadline_surfaces_as_timeout_error(
     _allow_sockets, make_server
 ) -> None:
@@ -293,6 +321,45 @@ async def test_plain_request_timeout_is_io_error(_allow_sockets, make_server) ->
 
     assert not isinstance(caught.value, TimeoutError)
     assert transport.stats.recycles == 1
+
+
+@pytest.mark.parametrize(
+    ("operation", "request_name"),
+    [("read", "read_holding_registers("), ("write", "write_registers(")],
+)
+async def test_request_arguments_stop_at_transport_boundary(
+    _allow_sockets, make_server, operation, request_name
+) -> None:
+    """4.4 operation context must not escape the integration boundary."""
+    server = await make_server(silent_units={1}, spaces={1: {}})
+    transport = _real_transport(server.port, timeout=0.15)
+    read_address = 54321
+    payload = [54321, 54322, 54323, 54324, 54325]
+
+    try:
+        with pytest.raises(ModbusIOError) as caught:
+            if operation == "read":
+                await transport.read_holding_registers_raw(1, read_address, 2)
+            else:
+                await transport.write_registers_raw(1, 61441, payload)
+    finally:
+        await transport.recycle()
+
+    error_name = "ModbusTimeoutError"
+    assert caught.value.__cause__ is None
+    assert caught.value.__suppress_context__ is True
+    assert transport.stats.last_error == f"{operation} unit 1: {error_name}"
+
+    rendered = "".join(traceback.format_exception(caught.value))
+    assert "54321" not in rendered
+    assert request_name not in rendered
+    if operation == "read":
+        assert str(caught.value) == f"read unit 1: {error_name}"
+    else:
+        assert str(caught.value) == (
+            "No confirmed response to write at 61441 on unit 1; "
+            f"the write may or may not have been applied ({error_name})"
+        )
 
 
 async def test_refused_connection_is_io_error(_allow_sockets, make_server) -> None:
@@ -382,3 +449,24 @@ async def test_direct_cancellation_still_retires_the_session(
     assert transport.stats.recycles == 1
     assert connection.close.await_count == 1, "the session must be closed"
     assert transport._connection is None
+
+
+async def test_laundered_write_cancellation_hides_library_context(transport) -> None:
+    """A pymodbus-wrapped cancellation must not expose the write payload."""
+    await transport.connect()
+    connection = transport.built[-1]
+    failure = ModbusTimeoutError(
+        "write_registers(61441, [54321, 54322]): request cancelled"
+    )
+    failure.__cause__ = asyncio.CancelledError()
+    connection.write_registers.side_effect = failure
+    payload = [54321, 54322]
+
+    with pytest.raises(asyncio.CancelledError) as caught:
+        await transport.write_registers_raw(1, 61441, payload)
+
+    assert caught.value.__cause__ is None
+    assert caught.value.__suppress_context__ is True
+    assert "54321" not in "".join(traceback.format_exception(caught.value))
+    assert transport.stats.recycles == 1
+    assert connection.close.await_count == 1

@@ -84,14 +84,17 @@ the actual guard regardless.
 
 ## Decisions that look like unfinished work
 
-### `close()` is permanent — connection generations are not a workaround
+### `close()` is permanent — connection generations remain fork policy
 
 `modbus_connection`'s `close()` sets `_closed` for good; a later `connect()`
 raises `ClientClosedError`. modbus-connection 4.0.0's release notes state this as
-deliberate design, not an alpha rough edge. A wedged socket can therefore only be
-*replaced*, never reopened, which is why `ModbusTransport` carries connection
-generations, `_shielded_recycle`, and a generation-bound `on_connection_lost`.
-**This is permanent architecture. Do not "simplify" it away.**
+deliberate design, not an alpha rough edge. Version 4.2 added `disconnect()` for
+reusing the same connection object after dropping its link, but this fork still
+retires failed and cancelled generations: its connection graph is small, while
+replacement guarantees shielded connects are cleaned up and late callbacks
+cannot touch live diagnostics. Keep `ModbusTransport`'s generations,
+`_shielded_recycle`, and generation-bound `on_connection_lost`; do not simplify
+them away merely because `disconnect()` exists.
 
 ### Stage D is closed — not deferred
 
